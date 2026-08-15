@@ -1,7 +1,8 @@
 /** Setlist : construction du set, contrôle des enchaînements, export. */
 import { h, clear } from '../core/dom.js';
 import { svg } from '../core/icons.js';
-import { modal, confirmDialog, promptDialog, toastOk, download, printDocument } from '../core/ui.js';
+import { modal, confirmDialog, promptDialog, toastOk, toastErr, download, printDocument, pickFile } from '../core/ui.js';
+import { parsePlaylist, readPlaylistFile, summarize } from '../core/playlist-import.js';
 import * as sl from '../core/setlists.js';
 import * as store from '../core/store.js';
 import { escapeHtml, toCsv, slugify, BOM, fmtNum } from '../core/text.js';
@@ -73,6 +74,11 @@ export default function mount(el) {
               refresh();
             },
           },
+        }),
+        h('button.btn.btn-sm', {
+          type: 'button', text: '⤓ Importer',
+          title: 'Importer une playlist Rekordbox, Serato, Engine DJ, Traktor ou M3U',
+          on: { click: () => importPlaylist(set) },
         }),
         h('button.btn.btn-sm.btn-danger', {
           type: 'button', text: 'Supprimer',
@@ -256,6 +262,100 @@ export default function mount(el) {
         )
       );
       return form;
+    });
+  }
+
+  /* ------------------------------ Import ------------------------------ */
+
+  async function importPlaylist(set) {
+    const file = await pickFile('.xml,.nml,.csv,.txt,.tsv,.m3u,.m3u8,.json,text/*,application/xml');
+    if (!file) return;
+
+    let result;
+    try {
+      result = parsePlaylist(await readPlaylistFile(file), file.name);
+    } catch (err) {
+      toastErr(`Lecture impossible : ${err.message || err}`);
+      return;
+    }
+
+    if (!result.tracks.length) {
+      modal((close) => h('div', null,
+        h('h2', { text: 'Aucun titre trouvé' }),
+        h('p.small.muted', { text: `Le fichier « ${file.name} » a été reconnu comme : ${result.source}. Aucun morceau n’a pu en être extrait.` }),
+        ...(result.warnings || []).map((w) => h('p.tiny.muted', { text: `• ${w}` })),
+        h('p.tiny.muted', { text: 'Depuis Rekordbox : Fichier → Exporter la collection au format xml. Depuis Serato : panneau History → Export → csv. Depuis Traktor : clic droit sur la playlist → Export playlist (.nml). Depuis Engine DJ : clic droit sur la playlist → Export.' }),
+        h('div.row.end', { style: { marginTop: '1rem' } },
+          h('button.btn.btn-primary', { type: 'button', text: 'Fermer', on: { click: () => close() } }))
+      ));
+      return;
+    }
+
+    const stats = summarize(result);
+
+    modal((close) => {
+      const preview = result.tracks.slice(0, 8).map((t, i) => h('tr', null,
+        h('td.num', { text: String(i + 1) }),
+        h('td', null,
+          h('div.small', { text: t.title || '—' }),
+          h('div.tiny.muted', { text: t.artist || '' })
+        ),
+        h('td.num', { text: t.bpm ? fmtNum(t.bpm, 1) : '—' }),
+        h('td', null, t.key ? h('span.badge.badge-accent', { text: t.key }) : h('span.tiny.muted', { text: '—' })),
+        h('td.num', { text: t.duration ? fmtDuration(t.duration) : '—' })
+      ));
+
+      const apply = (mode) => {
+        const incoming = result.tracks.map((t) => sl.emptyTrack({
+          title: t.title,
+          artist: t.artist,
+          bpm: t.bpm,
+          key: t.key,
+          duration: t.duration,
+          notes: t.comment || '',
+        }));
+
+        if (mode === 'new') {
+          const created = sl.create(result.name || 'Playlist importée');
+          sl.update(created.id, { tracks: incoming });
+          currentId = created.id;
+        } else {
+          sl.update(set.id, { tracks: [...(set.tracks || []), ...incoming] });
+        }
+        close();
+        refresh();
+        toastOk(`${incoming.length} titre(s) importé(s)`);
+      };
+
+      return h('div', null,
+        h('h2', { text: 'Aperçu de l’import' }),
+        h('div.row.tight', { style: { marginBottom: '.8rem' } },
+          h('span.badge.badge-accent', { text: result.source }),
+          h('span.badge', { text: `${stats.count} titres` }),
+          h('span.badge', { class: stats.withBpm === stats.count ? 'badge-ok' : 'badge-warn', text: `${stats.withBpm} avec tempo` }),
+          h('span.badge', { class: stats.withKey === stats.count ? 'badge-ok' : 'badge-warn', text: `${stats.withKey} avec clef` }),
+          stats.totalDuration ? h('span.badge', { text: fmtDuration(stats.totalDuration) }) : null
+        ),
+        h('p.small.muted', { text: `Playlist détectée : « ${result.name} »` }),
+        h('div.table-wrap', { style: { maxHeight: '260px', overflowY: 'auto' } },
+          h('table', null,
+            h('thead', null, h('tr', null,
+              h('th.num', { text: '#' }), h('th', { text: 'Titre' }),
+              h('th.num', { text: 'BPM' }), h('th', { text: 'Clef' }), h('th.num', { text: 'Durée' })
+            )),
+            h('tbody', null, ...preview)
+          )
+        ),
+        result.tracks.length > 8
+          ? h('p.tiny.muted', { text: `… et ${result.tracks.length - 8} autre(s).` })
+          : null,
+        ...(result.warnings || []).map((w) => h('p.tiny', { text: `⚠ ${w}`, style: { color: 'var(--warn)' } })),
+        h('div.row.end', { style: { marginTop: '1rem' } },
+          h('button.btn.btn-ghost', { type: 'button', text: 'Annuler', on: { click: () => close() } }),
+          h('button.btn', { type: 'button', text: 'Ajouter au set courant', on: { click: () => apply('append') } }),
+          h('button.btn.btn-primary', { type: 'button', text: 'Créer une setlist', on: { click: () => apply('new') } })
+        )
+      );
     });
   }
 

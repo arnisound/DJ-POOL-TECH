@@ -1,8 +1,8 @@
 # DJ Pool Tech
 
 **La boîte à outils du DJ** — une application web qui réunit les outils du quotidien :
-génération de fiche technique et de rider, analyse du tempo et de la tonalité,
-tap tempo, roue Camelot, préparation de setlist, calculateurs de mix.
+génération de fiche technique et de rider, plan de câblage, analyse du tempo et de
+la tonalité, import de playlists, tap tempo, roue Camelot, préparation de setlist.
 
 Elle fonctionne sur téléphone comme sur ordinateur, s'installe sur l'écran d'accueil
 et reste utilisable **hors ligne**, en cabine comme en sous-sol.
@@ -25,9 +25,16 @@ et reste utilisable **hors ligne**, en cabine comme en sous-sol.
 
 | Outil | Ce qu'il fait |
 |---|---|
-| **Setlist** | Plusieurs sets, réordonnancement, contrôle automatique de la compatibilité harmonique et de l'écart de tempo entre chaque titre, courbe d'énergie, export CSV et PDF. |
+| **Setlist** | Plusieurs sets, **import depuis Rekordbox, Serato, Engine DJ, Traktor et M3U**, réordonnancement, contrôle automatique de la compatibilité harmonique et de l'écart de tempo entre chaque titre, courbe d'énergie, export CSV et PDF. |
 | **Timer de set** | Compte à rebours plein écran, alertes à 10 / 5 / 1 minute, heure de fin prévue, écran maintenu allumé. |
 | **Checklist matériel** | Listes types (club, prestation mobile, festival, radio), personnalisables, imprimables. |
+
+### Scène & câblage
+
+| Outil | Ce qu'il fait |
+|---|---|
+| **Plan de câblage** | Éditeur de schéma : on pose ses appareils, on relie les ports au doigt, l'application vérifie la cohérence des branchements et dresse la liste des câbles à emporter. Six configurations types prêtes à l'emploi. |
+| **Performeurs** | Saxophoniste, chanteur, percussionniste, VJ… Chaque performeur apporte ses besoins (micro, DI, retour, pied, 48 V, espace) et sa ligne dans la patch list. |
 
 ### Documents
 
@@ -35,7 +42,7 @@ et reste utilisable **hors ligne**, en cabine comme en sous-sol.
 |---|---|
 | **Profil artiste** | Saisi une fois, réutilisé partout : identité, contacts, booking, contact technique, logo. |
 | **Fiche technique** | Cinq configurations pré-remplies (CDJ, contrôleur, vinyle/DVS, hybride, mobile), aperçu en direct, export PDF A4. |
-| **Rider technique** | Rider complet — son, cabine, éclairage, personnel, planning, loges, transport, hébergement, sécurité, captation — avec presets club / festival / mariage / bar et sections activables. |
+| **Rider technique** | Rider complet — son, cabine, éclairage, personnel, planning, loges, transport, hébergement, sécurité, captation — avec presets club / festival / mariage / bar et sections activables. Le schéma de câblage, les performeurs et la liste des lignes s'y ajoutent automatiquement. |
 
 ---
 
@@ -46,6 +53,13 @@ navigateur, via l'API Web Audio. Aucun fichier n'est téléversé, aucun compte 
 demandé, aucune requête réseau n'est faite pendant l'analyse. Les fiches, riders et
 setlists sont stockés dans le `localStorage` du navigateur ; la fonction
 « Sauvegarde / Restauration » permet de les exporter en JSON pour les transférer.
+
+**Les playlists sont reconnues au contenu, pas à l'extension.** L'importeur
+identifie seul un XML Rekordbox, un NML Traktor, un CSV Serato, un export
+tabulé Engine DJ ou un M3U, détecte le séparateur et l'encodage (Rekordbox
+exporte en UTF-16), fait correspondre les colonnes en français comme en anglais
+et convertit toutes les notations de tonalité vers le Camelot. Un aperçu
+s'affiche avant d'écrire quoi que ce soit.
 
 **L'export PDF passe par l'impression du navigateur.** Les documents sont mis en page
 en A4 par une feuille de style dédiée ; il suffit de choisir « Enregistrer en PDF »
@@ -100,6 +114,11 @@ js/
     doc.js              briques de mise en page des documents
     profile.js          profil artiste partagé
     setlists.js         modèle de setlist
+    gear.js             catalogue du matériel et de sa connectique
+    patch.js            plan de câblage : modèle, contrôles, rendu SVG
+    performers.js       performeurs et liste des lignes
+    playlist-import.js  import Rekordbox, Traktor, Serato, Engine, M3U
+    xml.js              analyseur XML minimal, sans DOMParser
     icons.js            jeu d'icônes SVG
   audio/
     fft.js              FFT radix-2
@@ -112,7 +131,33 @@ js/
     …                   un module par outil
 tests/
   dsp.test.mjs          tests du DSP et de la théorie musicale
+  playlist.test.mjs     tests de l'import de playlists
 ```
+
+---
+
+## Le plan de câblage
+
+Chaque appareil du catalogue déclare ses ports : type de connecteur, sens du
+signal, caractère stéréo. L'application s'en sert pour trois choses.
+
+**Refuser l'impossible.** Deux sorties ne se raccordent pas entre elles, un
+signal de puissance n'entre pas dans une entrée ligne : la liaison est
+simplement refusée, avec la raison.
+
+**Prévenir sur ce qui passe mais se paie.** Une sortie ligne dans une entrée
+phono, un master dans une entrée micro sans pad, un micro dans une entrée
+ligne : la liaison est créée, mais signalée en pointillés avec le réglage à
+vérifier. Ce sont les trois causes les plus fréquentes de saturation en
+prestation.
+
+**Compter les câbles.** Une liaison XLR stéréo, ce sont deux cordons ; un
+cordon RCA double n'en fait qu'un. La liste tient compte de la longueur saisie
+pour chaque liaison, et se retrouve telle quelle dans le PDF.
+
+Un contrôle d'ensemble signale enfin les appareils reliés à rien, ceux qui
+attendent une prise 230 V, et les entrées alimentées par deux sources — ce qui
+n'est pas possible sans splitter.
 
 ---
 
@@ -153,11 +198,18 @@ exactement les mêmes notes. Vérifiez toujours au casque avant de jouer.
 npm test
 ```
 
-Le fichier `tests/dsp.test.mjs` vérifie sur des signaux synthétiques :
-la table complète des 24 correspondances Camelot, les règles de compatibilité,
-les calculs de pitch, la détection du tempo entre 90 et 174 BPM, le calage de la
-grille sur la grosse caisse, la reconnaissance d'une tonalité majeure et mineure,
-et la mesure du désaccord.
+`tests/dsp.test.mjs` vérifie sur des signaux synthétiques : la table complète
+des 24 correspondances Camelot, les règles de compatibilité, les calculs de
+pitch, la détection du tempo entre 90 et 174 BPM, le calage de la grille sur la
+grosse caisse, la reconnaissance d'une tonalité majeure et mineure, et la mesure
+du désaccord.
+
+`tests/playlist.test.mjs` vérifie l'import sur des échantillons reproduisant la
+structure réelle des exports : XML Rekordbox (avec entités et ordre de
+playlist), NML Traktor (valeurs MUSICAL_KEY), CSV Serato (ligne de session avant
+l'en-tête), export tabulé Engine DJ, M3U, fichier sans en-tête, ainsi que toutes
+les notations de tonalité — « Am », « La mineur », « 8A », « 1m », « F#m »,
+« Gbm ».
 
 ---
 

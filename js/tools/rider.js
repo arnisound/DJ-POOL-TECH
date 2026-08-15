@@ -5,7 +5,9 @@ import { printDocument, downloadJSON, pickFile, readText, toastOk, toastErr, con
 import * as store from '../core/store.js';
 import { loadProfile, documentHeader, contactSection } from '../core/profile.js';
 import { escapeHtml, bulletList, slugify } from '../core/text.js';
-import { section, subBlock, kvGrid, note, signatures, formatDate } from '../core/doc.js';
+import { section, subBlock, kvGrid, note, signatures, formatDate, performersSection, inputListSection, patchSection } from '../core/doc.js';
+import { allPerformers } from '../core/performers.js';
+import { allPlans } from '../core/patch.js';
 
 const KEY = 'rider.technique';
 
@@ -76,6 +78,10 @@ const DEFAULTS = {
   includeSecurity: true,
   includeRecording: true,
   includeSignature: false,
+  includePerformers: true,
+  includeInputList: true,
+  includePatch: true,
+  patchPlanId: '',
 
   pa: "Système de diffusion professionnel adapté à la jauge (L-Acoustics, d&b, Funktion-One, Void ou équivalent).\nSystème calé, vérifié et fonctionnel avant l'arrivée de l'artiste.\nSubwoofers en phase avec la façade.",
   soundLimit: "En présence d'un limiteur, merci d'en préciser le seuil et le fonctionnement au moins 7 jours avant la date.\nUn limiteur mal réglé coupant la diffusion en pleine soirée n'est pas de la responsabilité de l'artiste.",
@@ -112,7 +118,7 @@ const DEFAULTS = {
   version: new Date().toISOString().slice(0, 10),
 };
 
-const SCHEMA = [
+const buildSchema = () => [
   { type: 'section', label: 'Cadre de la prestation' },
   { name: 'preset', label: 'Type de date', type: 'select', options: Object.entries(PRESETS).map(([value, p]) => ({ value, label: p.label })), width: 'full' },
   { name: 'context', label: 'Contexte', type: 'textarea', rows: 2, width: 'full' },
@@ -128,6 +134,10 @@ const SCHEMA = [
   { name: 'includeSecurity', label: 'Sécurité et accès', type: 'checkbox' },
   { name: 'includeRecording', label: 'Captation et diffusion', type: 'checkbox' },
   { name: 'includeSignature', label: 'Bloc de signatures', type: 'checkbox' },
+  { name: 'includePerformers', label: 'Performeurs', type: 'checkbox' },
+  { name: 'includeInputList', label: 'Liste des lignes (patch list)', type: 'checkbox' },
+  { name: 'includePatch', label: 'Plan de câblage', type: 'checkbox' },
+  { name: 'patchPlanId', label: 'Plan à joindre', type: 'select', options: riderPlanOptions(), width: 'full' },
 
   { type: 'section', label: 'Diffusion façade' },
   { name: 'pa', label: 'Système', type: 'textarea', rows: 3, width: 'full' },
@@ -172,6 +182,13 @@ const SCHEMA = [
   { name: 'terms', label: 'Conditions générales', type: 'textarea', rows: 4, width: 'full' },
 ];
 
+/** Liste des plans enregistrés, pour le sélecteur. */
+function riderPlanOptions() {
+  const plans = allPlans();
+  return [{ value: '', label: plans.length ? '— le plus récent —' : '— aucun plan enregistré —' },
+    ...plans.map((p) => ({ value: p.id, label: p.name }))];
+}
+
 /* ------------------------------ Outil ------------------------------ */
 
 export default function mount(el) {
@@ -195,7 +212,7 @@ export default function mount(el) {
     renderPreview();
   };
 
-  let form = buildForm(SCHEMA, data, onFieldChange);
+  let form = buildForm(buildSchema(), data, onFieldChange);
   const formCard = h('div.card', null,
     h('div.card-head', null, h('h2', { text: 'Contenu du rider' })),
     form
@@ -253,7 +270,7 @@ export default function mount(el) {
     if (!preset) return;
     Object.assign(data, preset.values);
     store.save(KEY, data);
-    const fresh = buildForm(SCHEMA, data, onFieldChange);
+    const fresh = buildForm(buildSchema(), data, onFieldChange);
     formCard.replaceChild(fresh, form);
     form = fresh;
     renderPreview();
@@ -313,6 +330,16 @@ export function buildRider(profile, d) {
   if (d.includeLighting) parts.push(section('Éclairage et effets', bulletList(d.lighting)));
 
   parts.push(section('Personnel technique', bulletList(d.staff)));
+
+  const performers = allPerformers();
+  if (d.includePerformers) parts.push(performersSection(performers));
+  if (d.includeInputList) parts.push(inputListSection(performers, { djLabel: profile.artistName || 'Cabine DJ' }));
+
+  if (d.includePatch) {
+    const plans = allPlans();
+    const plan = plans.find((pl) => pl.id === d.patchPlanId) || plans[0];
+    parts.push(patchSection(plan));
+  }
 
   if (d.includeHospitality) {
     parts.push(section('Loges et restauration', [

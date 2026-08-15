@@ -23,6 +23,8 @@ export const ICONS = {
   speaker:   '<rect x="5" y="2.5" width="14" height="19" rx="2"/><circle cx="12" cy="15" r="3.4"/><circle cx="12" cy="7" r="1.6"/>',
   bolt:      '<path d="M13 2 4.5 13.5H11L10 22l8.5-11.5H12z"/>',
   info:      '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>',
+  plug:      '<path d="M9 2v6M15 2v6M7 8h10v3a5 5 0 0 1-5 5 5 5 0 0 1-5-5zM12 16v6"/>',
+  mic:       '<rect x="9" y="2.5" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3.5M8.5 21.5h7"/>',
 };
 
 /** Renvoie le markup SVG complet pour une icône. */

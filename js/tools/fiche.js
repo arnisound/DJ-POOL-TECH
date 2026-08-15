@@ -5,7 +5,9 @@ import { printDocument, downloadJSON, pickFile, readText, toastOk, toastErr, con
 import * as store from '../core/store.js';
 import { loadProfile, documentHeader, contactSection } from '../core/profile.js';
 import { escapeHtml, bulletList, slugify } from '../core/text.js';
-import { section, subBlock, kv, formatDate } from '../core/doc.js';
+import { section, subBlock, kv, formatDate, performersSection, inputListSection, patchSection } from '../core/doc.js';
+import { allPerformers } from '../core/performers.js';
+import { allPlans } from '../core/patch.js';
 
 const KEY = 'fiche.technique';
 
@@ -99,9 +101,14 @@ const DEFAULTS = {
 
   extras: "Merci de prévenir de tout changement de matériel au moins 7 jours avant la date.\nEn cas d'impossibilité sur un point de cette fiche, contactez-moi : une solution existe presque toujours.",
   version: new Date().toISOString().slice(0, 10),
+
+  includePerformers: true,
+  includeInputList: true,
+  includePatch: false,
+  patchPlanId: '',
 };
 
-const SCHEMA = [
+const buildSchema = () => [
   { type: 'section', label: 'Prestation' },
   { name: 'setFormat', label: 'Format', type: 'select', options: ['DJ set', 'DJ set + MC', 'B2B', 'Live', 'DJ set vinyle'] },
   { name: 'setDuration', label: 'Durée du set', placeholder: '2 heures' },
@@ -134,9 +141,22 @@ const SCHEMA = [
   { name: 'setupTime', label: 'Temps d’installation' },
   { name: 'soundcheck', label: 'Balances / soundcheck' },
 
+  { type: 'section', label: 'Plateau et câblage', hint: 'Les performeurs se saisissent dans l’outil « Performeurs », le schéma dans « Plan de câblage ». Ils sont repris ici automatiquement.' },
+  { name: 'includePerformers', label: 'Inclure les performeurs', type: 'checkbox' },
+  { name: 'includeInputList', label: 'Inclure la liste des lignes', type: 'checkbox' },
+  { name: 'includePatch', label: 'Inclure le plan de câblage', type: 'checkbox' },
+  { name: 'patchPlanId', label: 'Plan à joindre', type: 'select', options: planOptions(), width: 'full' },
+
   { type: 'section', label: 'Remarques' },
   { name: 'extras', label: 'Informations complémentaires', type: 'textarea', rows: 4, width: 'full' },
 ];
+
+/** Liste des plans enregistrés, pour le sélecteur. */
+function planOptions() {
+  const plans = allPlans();
+  return [{ value: '', label: plans.length ? '— le plus récent —' : '— aucun plan enregistré —' },
+    ...plans.map((p) => ({ value: p.id, label: p.name }))];
+}
 
 /* ------------------------------ Outil ------------------------------ */
 
@@ -161,7 +181,7 @@ export default function mount(el) {
     renderPreview();
   };
 
-  let form = buildForm(SCHEMA, data, onFieldChange);
+  let form = buildForm(buildSchema(), data, onFieldChange);
   const formCard = h('div.card', null,
     h('div.card-head', null, h('h2', { text: 'Contenu de la fiche' })),
     form
@@ -221,7 +241,7 @@ export default function mount(el) {
     Object.assign(data, preset.values);
     store.save(KEY, data);
     // Le formulaire est reconstruit pour refléter les valeurs pré-remplies.
-    const fresh = buildForm(SCHEMA, data, onFieldChange);
+    const fresh = buildForm(buildSchema(), data, onFieldChange);
     formCard.replaceChild(fresh, form);
     form = fresh;
     renderPreview();
@@ -283,6 +303,16 @@ export function buildDoc(profile, d) {
     subBlock('Électricité', d.power),
     subBlock('Réseau', d.network),
   ].join('')));
+
+  const performers = allPerformers();
+  if (d.includePerformers) parts.push(performersSection(performers));
+  if (d.includeInputList) parts.push(inputListSection(performers, { djLabel: profile.artistName || 'Cabine DJ' }));
+
+  if (d.includePatch) {
+    const plans = allPlans();
+    const plan = plans.find((pl) => pl.id === d.patchPlanId) || plans[0];
+    parts.push(patchSection(plan));
+  }
 
   if (d.extras && d.extras.trim()) {
     parts.push(`<div class="doc-section"><h2>Informations complémentaires</h2><div class="doc-note">${bulletList(d.extras) || escapeHtml(d.extras)}</div></div>`);

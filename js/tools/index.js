@@ -9,6 +9,7 @@ export const GROUPS = [
   { id: 'main',   label: '' },
   { id: 'mix',    label: 'Analyse & mix' },
   { id: 'set',    label: 'Préparation du set' },
+  { id: 'scene',  label: 'Scène & câblage' },
   { id: 'docs',   label: 'Documents' },
 ];
 
@@ -110,6 +111,28 @@ export const TOOLS = [
     heading: 'Checklist matériel',
     desc: "Ne plus jamais oublier un adaptateur : listes types par type de prestation, personnalisables.",
     mount: lazy(() => import('./checklist.js')),
+  },
+  {
+    id: 'cablage',
+    title: 'Plan de câblage',
+    short: 'Câblage',
+    icon: 'plug',
+    group: 'scene',
+    eyebrow: 'Schéma',
+    heading: 'Plan de câblage',
+    desc: "Dessinez le branchement de votre installation : le schéma, la liste des câbles à emporter et les erreurs de patch repérées automatiquement.",
+    mount: lazy(() => import('./cablage.js')),
+  },
+  {
+    id: 'performeurs',
+    title: 'Performeurs',
+    short: 'Perfs',
+    icon: 'mic',
+    group: 'scene',
+    eyebrow: 'Scène',
+    heading: 'Performeurs & liste des lignes',
+    desc: "Saxophoniste, chanteur, percussionniste, VJ… Chaque performeur ajoute ses besoins techniques à vos documents et sa ligne à la patch list.",
+    mount: lazy(() => import('./performeurs.js')),
   },
   {
     id: 'profil',

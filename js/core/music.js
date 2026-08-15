@@ -113,6 +113,73 @@ export function keyCompatibility(fromCode, toCode) {
   return { score: 18, level: 'à éviter', label: `${dist} pas sur la roue — dissonance probable` };
 }
 
+/**
+ * Reconnaît une clef écrite dans à peu près n'importe quelle notation et
+ * renvoie son code Camelot. Indispensable à l'import de playlists : chaque
+ * logiciel écrit la tonalité à sa façon.
+ *
+ * Accepte : « 8A », « 08A », « 1m » / « 1d » (Open Key), « Am », « F#m »,
+ * « Abm », « A min », « A minor », « La mineur », « Cmaj », « C ».
+ * @returns {string} code Camelot, ou '' si rien n'est reconnaissable
+ */
+export function parseAnyKey(input) {
+  const raw = String(input ?? '').trim();
+  if (!raw) return '';
+
+  // Camelot : 8A, 08A, 8 A
+  const camelot = /^\s*(\d{1,2})\s*([ABab])\s*$/.exec(raw);
+  if (camelot) {
+    const code = Number(camelot[1]) + camelot[2].toUpperCase();
+    return parseCamelot(code) ? code : '';
+  }
+
+  // Open Key : 1m (mineur) / 1d (majeur)
+  const open = /^\s*(\d{1,2})\s*([mdMD])\s*$/.exec(raw);
+  if (open) {
+    const n = Number(open[1]);
+    if (n < 1 || n > 12) return '';
+    const minor = open[2].toLowerCase() === 'm';
+    const num = ((n - 1 + 7) % 12) + 1;   // 1d ↔ 8B, 1m ↔ 8A
+    return num + (minor ? 'A' : 'B');
+  }
+
+  // Notation classique, anglaise ou française
+  const cleaned = raw.replace(/\s+/g, ' ').trim();
+  // Les noms français sont essayés en premier : sinon « Do majeur » serait
+  // lu comme un Ré anglais suivi d'un reste incompréhensible.
+  const note = /^(Do|Ré|Re|Mi|Fa|Sol|La|Si)\s*([#♯b♭]?)\s*(.*)$/i.exec(cleaned)
+    || /^([A-Ga-g])\s*([#♯b♭]?)\s*(.*)$/.exec(cleaned);
+  if (!note) return '';
+
+  const FR = { do: 0, ré: 2, re: 2, mi: 4, fa: 5, sol: 7, la: 9, si: 11 };
+  const EN = { c: 0, d: 2, e: 4, f: 5, g: 7, a: 9, b: 11 };
+  const head = note[1].toLowerCase();
+  let pc = head in EN && head.length === 1 ? EN[head] : FR[head];
+  if (pc === undefined) return '';
+
+  const accidental = note[2];
+  if (accidental === '#' || accidental === '♯') pc += 1;
+  if (accidental === 'b' || accidental === '♭') pc -= 1;
+  pc = ((pc % 12) + 12) % 12;
+
+  const rest = (note[3] || '').toLowerCase().replace(/[\s.]/g, '');
+  const isMinor = /^(m|min|minor|mineur|moll)$/.test(rest) || rest.startsWith('min') || rest.startsWith('mineur');
+  const isMajor = rest === '' || /^(maj|major|majeur|dur)/.test(rest);
+  if (!isMinor && !isMajor) return '';
+
+  return toCamelot(pc, isMinor ? 'min' : 'maj');
+}
+
+/**
+ * Valeur MUSICAL_KEY de Traktor (0-23) → code Camelot.
+ * 0-11 : majeurs à partir de Do ; 12-23 : mineurs à partir de Do.
+ */
+export function keyFromTraktorValue(value) {
+  const v = Number(value);
+  if (!isFinite(v) || v < 0 || v > 23) return '';
+  return v < 12 ? toCamelot(v, 'maj') : toCamelot(v - 12, 'min');
+}
+
 /** Transpose une clef Camelot de n demi-tons. */
 export function transposeCamelot(code, semitones) {
   const k = parseCamelot(code);

@@ -452,6 +452,29 @@ td.num, th.num { text-align: right; font-family: var(--mono); }
    pas de `fill` ici, sinon la CSS écraserait l'attribut. */
 .wheel text { stroke: none; font-family: var(--mono); font-weight: 700; pointer-events: none; }
 
+/* Plan de câblage */
+.patch-canvas {
+  margin: 0 -0.6rem;
+  padding: .4rem .6rem;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  background:
+    linear-gradient(var(--line-soft) 1px, transparent 1px) 0 0 / 100% 28px,
+    linear-gradient(90deg, var(--line-soft) 1px, transparent 1px) 0 0 / 28px 100%,
+    var(--surface-2);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  min-height: 240px;
+}
+/* La règle globale `svg { stroke: currentColor }` se transmet aux enfants :
+   sans cette remise à zéro, les zones de clic transparentes apparaîtraient
+   comme des anneaux clairs par-dessus les libellés de ports. */
+.patch-svg { display: block; max-width: 100%; stroke: none; }
+.patch-svg text { stroke: none; font-family: var(--font); }
+.patch-svg .patch-title { font-family: var(--font); }
+.patch-svg .patch-port { transition: r .12s; }
+.patch-node { user-select: none; -webkit-user-select: none; }
+
 /* Tap tempo */
 .tap-pad {
   width: 100%; min-height: 190px;

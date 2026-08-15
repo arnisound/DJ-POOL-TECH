@@ -3,7 +3,7 @@
  * en sous-sol, sans réseau). Stratégie « network-first » pour les documents
  * de navigation, « stale-while-revalidate » pour le reste.
  */
-const VERSION = 'v1';
+const VERSION = 'v2';
 const CACHE = `dj-pool-tech-${VERSION}`;
 
 const PRECACHE = [
@@ -25,6 +25,12 @@ const PRECACHE = [
   './js/core/profile.js',
   './js/core/doc.js',
   './js/core/setlists.js',
+  './js/core/text.js',
+  './js/core/xml.js',
+  './js/core/gear.js',
+  './js/core/patch.js',
+  './js/core/performers.js',
+  './js/core/playlist-import.js',
   './js/audio/fft.js',
   './js/audio/decode.js',
   './js/audio/analyze.js',
@@ -43,6 +49,8 @@ const PRECACHE = [
   './js/tools/profil.js',
   './js/tools/fiche.js',
   './js/tools/rider.js',
+  './js/tools/cablage.js',
+  './js/tools/performeurs.js',
 ];
 
 self.addEventListener('install', (event) => {
