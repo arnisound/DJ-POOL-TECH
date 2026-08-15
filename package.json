@@ -8,6 +8,6 @@
   "keywords": ["dj", "bpm", "camelot", "fiche-technique", "rider", "pwa"],
   "scripts": {
     "start": "npx --yes http-server -p 8080 -c-1 .",
-    "test": "node tests/dsp.test.mjs && node tests/playlist.test.mjs"
+    "test": "node tests/dsp.test.mjs && node tests/playlist.test.mjs && node tests/gear.test.mjs"
   }
 }

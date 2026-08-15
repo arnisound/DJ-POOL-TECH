@@ -8,6 +8,7 @@ import { escapeHtml, bulletList, slugify } from '../core/text.js';
 import { section, subBlock, kvGrid, note, signatures, formatDate, performersSection, inputListSection, patchSection } from '../core/doc.js';
 import { allPerformers } from '../core/performers.js';
 import { allPlans } from '../core/patch.js';
+import { boothSection } from '../core/booth-doc.js';
 
 const KEY = 'rider.technique';
 
@@ -80,6 +81,7 @@ const DEFAULTS = {
   includeSignature: false,
   includePerformers: true,
   includeInputList: true,
+  includeBooth: true,
   includePatch: true,
   patchPlanId: '',
 
@@ -136,7 +138,8 @@ const buildSchema = () => [
   { name: 'includeSignature', label: 'Bloc de signatures', type: 'checkbox' },
   { name: 'includePerformers', label: 'Performeurs', type: 'checkbox' },
   { name: 'includeInputList', label: 'Liste des lignes (patch list)', type: 'checkbox' },
-  { name: 'includePatch', label: 'Plan de câblage', type: 'checkbox' },
+  { name: 'includeBooth', label: 'Plan de cabine (vue physique)', type: 'checkbox' },
+  { name: 'includePatch', label: 'Schéma de câblage détaillé', type: 'checkbox' },
   { name: 'patchPlanId', label: 'Plan à joindre', type: 'select', options: riderPlanOptions(), width: 'full' },
 
   { type: 'section', label: 'Diffusion façade' },
@@ -335,10 +338,11 @@ export function buildRider(profile, d) {
   if (d.includePerformers) parts.push(performersSection(performers));
   if (d.includeInputList) parts.push(inputListSection(performers, { djLabel: profile.artistName || 'Cabine DJ' }));
 
-  if (d.includePatch) {
+  if (d.includeBooth || d.includePatch) {
     const plans = allPlans();
     const plan = plans.find((pl) => pl.id === d.patchPlanId) || plans[0];
-    parts.push(patchSection(plan));
+    if (d.includeBooth) parts.push(boothSection(plan, profile));
+    if (d.includePatch) parts.push(patchSection(plan));
   }
 
   if (d.includeHospitality) {

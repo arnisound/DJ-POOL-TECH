@@ -33,7 +33,7 @@ et reste utilisable **hors ligne**, en cabine comme en sous-sol.
 
 | Outil | Ce qu'il fait |
 |---|---|
-| **Plan de câblage** | Éditeur de schéma : on pose ses appareils, on relie les ports au doigt, l'application vérifie la cohérence des branchements et dresse la liste des câbles à emporter. Six configurations types prêtes à l'emploi. |
+| **Plan de câblage** | Deux vues d'une même installation : le **plan de cabine** (la disposition physique, telle qu'elle apparaît sur un rider professionnel) et le **schéma de câblage** (port par port). L'application vérifie la cohérence des branchements et dresse la liste des câbles à emporter. Huit configurations types prêtes à l'emploi. |
 | **Performeurs** | Saxophoniste, chanteur, percussionniste, VJ… Chaque performeur apporte ses besoins (micro, DI, retour, pied, 48 V, espace) et sa ligne dans la patch list. |
 
 ### Documents
@@ -116,6 +116,8 @@ js/
     setlists.js         modèle de setlist
     gear.js             catalogue du matériel et de sa connectique
     patch.js            plan de câblage : modèle, contrôles, rendu SVG
+    stageplot.js        plan de cabine : disposition physique et rendu
+    booth-doc.js        page « l'organisateur doit fournir »
     performers.js       performeurs et liste des lignes
     playlist-import.js  import Rekordbox, Traktor, Serato, Engine, M3U
     xml.js              analyseur XML minimal, sans DOMParser
@@ -132,11 +134,44 @@ js/
 tests/
   dsp.test.mjs          tests du DSP et de la théorie musicale
   playlist.test.mjs     tests de l'import de playlists
+  gear.test.mjs         tests du catalogue, du câblage et du plan de cabine
 ```
 
 ---
 
-## Le plan de câblage
+## Le plan de cabine
+
+C'est la page que l'on envoie à l'organisateur : un encadré de titre, la liste
+de ce qu'il doit fournir, celle de ce que l'artiste apporte, puis la vue
+physique de l'installation — la rangée de matériel, la silhouette du DJ, les
+retours de part et d'autre, le réseau au-dessus, le micro devant.
+
+Chaque appareil du plan porte deux informations qui alimentent ce document :
+son **emplacement** dans la cabine (sur la table, à gauche, devant…), déduit de
+sa catégorie et rectifiable d'un menu ; et **qui le fournit**, l'organisateur ou
+l'artiste, ce qui répartit automatiquement les deux listes.
+
+Le schéma est vectoriel : il reste net à l'impression, et le PDF tient sur une
+page.
+
+---
+
+## Le catalogue de matériel
+
+Une soixantaine d'appareils, dont la connectique est relevée sur les
+documentations constructeur — panneaux arrière des DJM-A9, DJM-900NXS2,
+DJM-V10, Xone:96, X1850, XDJ-XZ, CDJ-3000 et consorts. Un DJM-A9 déclare bien
+ses quatre entrées ligne, ses quatre phono, ses quatre entrées numériques
+coaxiales, son micro à alimentation fantôme, sa boucle send/return, ses deux
+sorties casque et ses deux interfaces USB.
+
+Cette précision n'est pas décorative : c'est elle qui permet de brancher une
+sortie SEND sur le bon retour, de savoir qu'une embase combo accepte le XLR
+comme le jack, ou qu'un master en XLR représente deux cordons et pas un.
+
+---
+
+## Les contrôles de câblage
 
 Chaque appareil du catalogue déclare ses ports : type de connecteur, sens du
 signal, caractère stéréo. L'application s'en sert pour trois choses.
@@ -149,7 +184,9 @@ simplement refusée, avec la raison.
 phono, un master dans une entrée micro sans pad, un micro dans une entrée
 ligne : la liaison est créée, mais signalée en pointillés avec le réglage à
 vérifier. Ce sont les trois causes les plus fréquentes de saturation en
-prestation.
+prestation. À l'inverse, une embase combo qui reçoit un XLR ou un jack, ou un
+jack TS branché dans une embase TRS, ne déclenchent aucun avertissement : ce
+sont des branchements normaux.
 
 **Compter les câbles.** Une liaison XLR stéréo, ce sont deux cordons ; un
 cordon RCA double n'en fait qu'un. La liste tient compte de la longueur saisie
@@ -203,6 +240,12 @@ des 24 correspondances Camelot, les règles de compatibilité, les calculs de
 pitch, la détection du tempo entre 90 et 174 BPM, le calage de la grille sur la
 grosse caisse, la reconnaissance d'une tonalité majeure et mineure, et la mesure
 du désaccord.
+
+`tests/gear.test.mjs` vérifie l'intégrité du catalogue (identifiants et ports
+uniques, types de connecteurs connus, chaque mixeur DJ doté d'une sortie
+générale et d'une sortie cabine), la connectique relevée sur les documentations,
+les règles de branchement, la construction des huit configurations types, le
+comptage des câbles et la composition du plan de cabine.
 
 `tests/playlist.test.mjs` vérifie l'import sur des échantillons reproduisant la
 structure réelle des exports : XML Rekordbox (avec entités et ordre de

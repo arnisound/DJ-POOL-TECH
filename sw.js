@@ -3,7 +3,7 @@
  * en sous-sol, sans réseau). Stratégie « network-first » pour les documents
  * de navigation, « stale-while-revalidate » pour le reste.
  */
-const VERSION = 'v2';
+const VERSION = 'v3';
 const CACHE = `dj-pool-tech-${VERSION}`;
 
 const PRECACHE = [
@@ -31,6 +31,8 @@ const PRECACHE = [
   './js/core/patch.js',
   './js/core/performers.js',
   './js/core/playlist-import.js',
+  './js/core/stageplot.js',
+  './js/core/booth-doc.js',
   './js/audio/fft.js',
   './js/audio/decode.js',
   './js/audio/analyze.js',

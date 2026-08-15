@@ -298,8 +298,8 @@ export const PRESETS = {
       const ctrl = addNode(plan, 'ddjflx10', { x: 30, y: 200 });
       const console_ = addNode(plan, 'mixerlive', { x: 360, y: 120 });
       const foh = addNode(plan, 'foh', { x: 700, y: 140 });
-      addLink(plan, { node: laptop.id, port: 'usb1' }, { node: ctrl.id, port: 'usbb' }, { length: 2 });
-      addLink(plan, { node: ctrl.id, port: 'master' }, { node: console_.id, port: 'inline' }, { length: 10 });
+      addLink(plan, { node: laptop.id, port: 'usb1' }, { node: ctrl.id, port: 'usbb1' }, { length: 2 });
+      addLink(plan, { node: ctrl.id, port: 'master1' }, { node: console_.id, port: 'inline' }, { length: 10 });
       addLink(plan, { node: console_.id, port: 'main' }, { node: foh.id, port: 'in' }, { length: 15 });
       return plan;
     },
@@ -338,16 +338,65 @@ export const PRESETS = {
       const sub = addNode(plan, 'sub', { x: 420, y: 180 });
       const strip = addNode(plan, 'powerstrip', { x: 420, y: 380 });
       const light = addNode(plan, 'lightbar', { x: 750, y: 330 });
-      addLink(plan, { node: laptop.id, port: 'usb1' }, { node: ctrl.id, port: 'usbb' }, { length: 2 });
-      addLink(plan, { node: mic.id, port: 'out' }, { node: ctrl.id, port: 'mic' }, { length: 5 });
+      addLink(plan, { node: laptop.id, port: 'usb1' }, { node: ctrl.id, port: 'usbb1' }, { length: 2 });
+      addLink(plan, { node: mic.id, port: 'out' }, { node: ctrl.id, port: 'mic1' }, { length: 5 });
       // Chaînage classique en sono mobile : le caisson filtre, puis renvoie les têtes.
-      addLink(plan, { node: ctrl.id, port: 'master' }, { node: sub.id, port: 'in' }, { length: 10 });
+      addLink(plan, { node: ctrl.id, port: 'master1' }, { node: sub.id, port: 'in' }, { length: 10 });
       addLink(plan, { node: sub.id, port: 'thru' }, { node: foh.id, port: 'in' }, { length: 3 });
       addLink(plan, { node: strip.id, port: 'o1' }, { node: foh.id, port: 'pwr' }, { length: 5 });
       addLink(plan, { node: strip.id, port: 'o2' }, { node: sub.id, port: 'pwr' }, { length: 5 });
       addLink(plan, { node: strip.id, port: 'o3' }, { node: ctrl.id, port: 'pwr' }, { length: 3 });
       addLink(plan, { node: strip.id, port: 'o4' }, { node: light.id, port: 'pwr' }, { length: 10 });
       addLink(plan, { node: strip.id, port: 'o5' }, { node: mic.id, port: 'pwr' }, { length: 3 });
+      return plan;
+    },
+  },
+
+  club3hub: {
+    label: 'Club — 3 CDJ + hub Ethernet',
+    description: 'La configuration demandée par la plupart des riders internationaux.',
+    build: () => {
+      const plan = emptyPlan('Club — 3 CDJ + hub');
+      const players = [0, 1, 2].map((i) => addNode(plan, 'cdj3000', { x: 30, y: 20 + i * 200 }));
+      const mixer = addNode(plan, 'djm900', { x: 340, y: 120 });
+      const hub = addNode(plan, 'switch', { x: 340, y: 660 });
+      const laptop = addNode(plan, 'laptop', { x: 30, y: 620 });
+      const mic = addNode(plan, 'micfil', { x: 30, y: 800 });
+      const foh = addNode(plan, 'foh', { x: 720, y: 120 });
+      const booth = addNode(plan, 'booth', { x: 720, y: 260 });
+
+      players.forEach((cdj, i) => {
+        addLink(plan, { node: cdj.id, port: 'out' }, { node: mixer.id, port: `ch${i + 1}line` }, { length: 1 });
+        addLink(plan, { node: cdj.id, port: 'link' }, { node: hub.id, port: `p${i + 1}` }, { length: 2 });
+      });
+      addLink(plan, { node: mixer.id, port: 'link' }, { node: hub.id, port: 'p4' }, { length: 2 });
+      addLink(plan, { node: laptop.id, port: 'usb1' }, { node: mixer.id, port: 'usbb1' }, { length: 2 });
+      addLink(plan, { node: mic.id, port: 'out' }, { node: mixer.id, port: 'mic1' }, { length: 5 });
+      addLink(plan, { node: mixer.id, port: 'master1' }, { node: foh.id, port: 'in' }, { length: 10 });
+      addLink(plan, { node: mixer.id, port: 'booth' }, { node: booth.id, port: 'in' }, { length: 5 });
+      return plan;
+    },
+  },
+
+  allinone: {
+    label: 'Tout-en-un (XDJ-XZ) + vidéo',
+    description: 'Un seul appareil, plus la liaison vidéo vers la régie.',
+    build: () => {
+      const plan = emptyPlan('XDJ-XZ + vidéo');
+      const xz = addNode(plan, 'xdjxz', { x: 40, y: 60 });
+      const laptop = addNode(plan, 'laptop', { x: 40, y: 520 });
+      const mic = addNode(plan, 'micfil', { x: 40, y: 700 });
+      const foh = addNode(plan, 'foh', { x: 430, y: 60 });
+      const booth = addNode(plan, 'booth', { x: 430, y: 200 });
+      const fiber = addNode(plan, 'hdmifiber', { x: 430, y: 520 });
+      const screen = addNode(plan, 'videoproc', { x: 760, y: 520 });
+
+      addLink(plan, { node: xz.id, port: 'master1' }, { node: foh.id, port: 'in' }, { length: 10 });
+      addLink(plan, { node: xz.id, port: 'booth' }, { node: booth.id, port: 'in' }, { length: 5 });
+      addLink(plan, { node: mic.id, port: 'out' }, { node: xz.id, port: 'mic1' }, { length: 5 });
+      addLink(plan, { node: laptop.id, port: 'usb2' }, { node: xz.id, port: 'usbb' }, { length: 2 });
+      addLink(plan, { node: laptop.id, port: 'hdmi' }, { node: fiber.id, port: 'in' }, { length: 2 });
+      addLink(plan, { node: fiber.id, port: 'out' }, { node: screen.id, port: 'hdmiin' }, { length: 50 });
       return plan;
     },
   },

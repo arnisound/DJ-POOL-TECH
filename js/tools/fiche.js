@@ -8,6 +8,7 @@ import { escapeHtml, bulletList, slugify } from '../core/text.js';
 import { section, subBlock, kv, formatDate, performersSection, inputListSection, patchSection } from '../core/doc.js';
 import { allPerformers } from '../core/performers.js';
 import { allPlans } from '../core/patch.js';
+import { boothSection } from '../core/booth-doc.js';
 
 const KEY = 'fiche.technique';
 
@@ -104,6 +105,7 @@ const DEFAULTS = {
 
   includePerformers: true,
   includeInputList: true,
+  includeBooth: true,
   includePatch: false,
   patchPlanId: '',
 };
@@ -144,7 +146,8 @@ const buildSchema = () => [
   { type: 'section', label: 'Plateau et câblage', hint: 'Les performeurs se saisissent dans l’outil « Performeurs », le schéma dans « Plan de câblage ». Ils sont repris ici automatiquement.' },
   { name: 'includePerformers', label: 'Inclure les performeurs', type: 'checkbox' },
   { name: 'includeInputList', label: 'Inclure la liste des lignes', type: 'checkbox' },
-  { name: 'includePatch', label: 'Inclure le plan de câblage', type: 'checkbox' },
+  { name: 'includeBooth', label: 'Inclure le plan de cabine', type: 'checkbox' },
+  { name: 'includePatch', label: 'Inclure le schéma de câblage détaillé', type: 'checkbox' },
   { name: 'patchPlanId', label: 'Plan à joindre', type: 'select', options: planOptions(), width: 'full' },
 
   { type: 'section', label: 'Remarques' },
@@ -308,10 +311,11 @@ export function buildDoc(profile, d) {
   if (d.includePerformers) parts.push(performersSection(performers));
   if (d.includeInputList) parts.push(inputListSection(performers, { djLabel: profile.artistName || 'Cabine DJ' }));
 
-  if (d.includePatch) {
+  if (d.includeBooth || d.includePatch) {
     const plans = allPlans();
     const plan = plans.find((pl) => pl.id === d.patchPlanId) || plans[0];
-    parts.push(patchSection(plan));
+    if (d.includeBooth) parts.push(boothSection(plan, profile));
+    if (d.includePatch) parts.push(patchSection(plan));
   }
 
   if (d.extras && d.extras.trim()) {

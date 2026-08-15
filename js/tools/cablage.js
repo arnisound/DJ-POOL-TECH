@@ -1,14 +1,17 @@
 /** Plan de câblage : éditeur visuel du schéma de branchement. */
-import { h, clear } from '../core/dom.js';
+import { h, clear, segmented } from '../core/dom.js';
 import { modal, confirmDialog, promptDialog, toast, toastOk, toastErr, printDocument, downloadJSON } from '../core/ui.js';
 import * as store from '../core/store.js';
 import { escapeHtml, slugify } from '../core/text.js';
 import { GEAR_MAP, CATEGORIES, gearByCategory } from '../core/gear.js';
+import { loadProfile } from '../core/profile.js';
 import {
   PRESETS, emptyPlan, addNode, removeNode, addLink, removeLink,
   cableList, describeLink, nodeLabel, validate, renderPlan, planBounds, planToPrintSVG,
   allPlans, savePlan, deletePlan,
 } from '../core/patch.js';
+import { SLOTS, defaultSlot, renderStagePlot, providedLists } from '../core/stageplot.js';
+import { boothDocument } from '../core/booth-doc.js';
 
 const CUR_KEY = 'cablage.courant';
 
@@ -25,23 +28,31 @@ export default function mount(el) {
   let pendingPort = null;        // premier port cliqué, en attente du second
   let zoom = 0;                  // 0 = ajusté à la largeur
   let dragging = null;
+  let view = store.load('cablage.vue', 'cabine');   // 'cabine' | 'cablage'
 
   const canvas = h('div.patch-canvas');
   const headerHost = h('div');
   const sideHost = h('div');
 
   el.appendChild(headerHost);
+  const canvasHint = h('p.tiny.muted', { text: '' });
+  const zoomRow = h('div.row.tight', null,
+    h('button.btn.btn-sm', { type: 'button', text: '−', title: 'Réduire', on: { click: () => setZoom(-1) } }),
+    h('button.btn.btn-sm', { type: 'button', text: 'Ajuster', on: { click: () => setZoom(0) } }),
+    h('button.btn.btn-sm', { type: 'button', text: '+', title: 'Agrandir', on: { click: () => setZoom(1) } })
+  );
+
   el.appendChild(h('div.card', null,
     h('div.card-head', null,
-      h('h2', { text: 'Schéma' }),
+      segmented(
+        [{ value: 'cabine', label: 'Plan de cabine' }, { value: 'cablage', label: 'Schéma de câblage' }],
+        view,
+        (v) => { view = v; store.save('cablage.vue', v); pendingPort = null; renderCanvas(); renderSide(); }
+      ),
       h('span.spacer', { style: { marginLeft: 'auto' } }),
-      h('div.row.tight', null,
-        h('button.btn.btn-sm', { type: 'button', text: '−', title: 'Réduire', on: { click: () => setZoom(-1) } }),
-        h('button.btn.btn-sm', { type: 'button', text: 'Ajuster', on: { click: () => setZoom(0) } }),
-        h('button.btn.btn-sm', { type: 'button', text: '+', title: 'Agrandir', on: { click: () => setZoom(1) } })
-      )
+      zoomRow
     ),
-    h('p.tiny.muted', { text: 'Touchez un port, puis le port d’arrivée, pour créer une liaison. Touchez un câble pour le modifier. Faites glisser l’en-tête d’un appareil pour le déplacer.' }),
+    canvasHint,
     canvas
   ));
   el.appendChild(sideHost);
@@ -189,6 +200,11 @@ export default function mount(el) {
 
   function renderCanvas() {
     clear(canvas);
+    canvasHint.textContent = view === 'cabine'
+      ? 'Vue physique de l’installation, telle qu’elle apparaîtra sur votre rider. Les emplacements se règlent dans la liste des appareils ci-dessous.'
+      : 'Touchez un port, puis le port d’arrivée, pour créer une liaison. Touchez un câble pour le modifier. Faites glisser l’en-tête d’un appareil pour le déplacer.';
+    zoomRow.style.display = view === 'cabine' ? 'none' : '';
+
     if (!plan.nodes.length) {
       canvas.appendChild(h('div.empty', null,
         h('p', { text: 'Ce plan est vide.' }),
@@ -197,15 +213,24 @@ export default function mount(el) {
       return;
     }
 
-    const el2 = renderPlan(plan, {
+    if (view === 'cabine') {
+      canvas.appendChild(renderStagePlot(plan, { djLabel: djLabel() }));
+      return;
+    }
+
+    canvas.appendChild(renderPlan(plan, {
       interactive: true,
       pendingPort,
       onPort: handlePortClick,
       onLink: openLinkDialog,
       onNodePointerDown: startDrag,
-    });
-    canvas.appendChild(el2);
+    }));
     applyZoom();
+  }
+
+  function djLabel() {
+    const profile = loadProfile();
+    return profile.artistName || 'DJ';
   }
 
   function handlePortClick(node, port) {
@@ -340,11 +365,51 @@ export default function mount(el) {
     }
     for (const node of plan.nodes) {
       const gear = GEAR_MAP[node.gearId];
-      nodesCard.appendChild(h('div.list-item', null,
+
+      // Emplacement dans la cabine
+      const slotSelect = h('select', { style: { minWidth: '120px', minHeight: '34px', fontSize: '.8rem' } });
+      for (const [id, slot] of Object.entries(SLOTS)) {
+        slotSelect.appendChild(h('option', { value: id, text: slot.label }));
+      }
+      slotSelect.value = node.slot || defaultSlot(node.gearId);
+      slotSelect.addEventListener('change', () => {
+        node.slot = slotSelect.value;
+        persist(); renderCanvas();
+      });
+
+      // Qui fournit le matériel : alimente la liste du rider
+      const byWhom = h('select', { style: { minWidth: '120px', minHeight: '34px', fontSize: '.8rem' } });
+      byWhom.appendChild(h('option', { value: 'promoter', text: 'Organisateur' }));
+      byWhom.appendChild(h('option', { value: 'artist', text: 'Artiste' }));
+      byWhom.value = node.provided || gear?.provided || 'promoter';
+      byWhom.addEventListener('change', () => {
+        node.provided = byWhom.value;
+        persist(); renderSide();
+      });
+
+      const move = (dir) => {
+        const list = plan.nodes.filter((n) => (n.slot || defaultSlot(n.gearId)) === (node.slot || defaultSlot(node.gearId)));
+        list.forEach((n, i) => { if (n.order === undefined) n.order = i; });
+        const i = list.indexOf(node);
+        const j = i + dir;
+        if (j < 0 || j >= list.length) return;
+        const a = list[i].order ?? i;
+        list[i].order = list[j].order ?? j;
+        list[j].order = a;
+        persist(); renderCanvas(); renderSide();
+      };
+
+      nodesCard.appendChild(h('div.list-item', { style: { flexWrap: 'wrap' } },
         h('span', { style: { width: '8px', height: '32px', borderRadius: '3px', background: catColor(gear), flex: 'none' } }),
         h('div.grow', null,
           h('div.ttl', { text: nodeLabel(node) }),
-          h('div.tiny.muted', { text: gear ? gear.note : 'Appareil inconnu' })
+          h('div.tiny.muted', { text: gear ? gear.note : 'Appareil inconnu' }),
+          h('div.row.tight', { style: { marginTop: '.4rem' } },
+            h('span.tiny.muted', { text: 'Place :' }), slotSelect,
+            h('span.tiny.muted', { text: 'Fourni par :' }), byWhom,
+            h('button.btn.btn-sm.btn-ghost', { type: 'button', text: '◀', title: 'Vers la gauche', on: { click: () => move(-1) } }),
+            h('button.btn.btn-sm.btn-ghost', { type: 'button', text: '▶', title: 'Vers la droite', on: { click: () => move(1) } })
+          )
         ),
         h('button.btn.btn-sm.btn-ghost', {
           type: 'button', text: 'Renommer',
@@ -446,7 +511,11 @@ export default function mount(el) {
     /* Actions */
     sideHost.appendChild(h('div.sticky-actions', null,
       h('button.btn.btn-primary', {
-        type: 'button', text: 'Imprimer / PDF',
+        type: 'button', text: 'Imprimer le plan de cabine',
+        on: { click: () => printDocument(boothDocument(loadProfile(), plan), `Plan de cabine - ${plan.name}`) },
+      }),
+      h('button.btn.btn-sm', {
+        type: 'button', text: 'Imprimer le schéma de câblage',
         on: { click: () => printPlan(plan) },
       }),
       h('button.btn.btn-sm', {

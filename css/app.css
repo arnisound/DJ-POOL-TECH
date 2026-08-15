@@ -443,6 +443,20 @@ td.num, th.num { text-align: right; font-family: var(--mono); }
 .doc-note { background: #f3f4f9; border-left: 3px solid #5b3df0; padding: .5rem .7rem; font-size: .8rem; border-radius: 0 6px 6px 0; }
 .doc-foot { margin-top: 1.2rem; padding-top: .6rem; border-top: 1px solid #c9cddb; font-size: .72rem; color: #737a8d; }
 
+/* Document « plan de cabine », dans la forme des riders professionnels */
+.doc-titlebox { border: 2px solid #14161d; padding: .6rem 1rem; text-align: center; margin-bottom: 1.2rem; }
+.doc-titlebox h1 { margin: 0; font-size: 1.4rem; letter-spacing: -.01em; text-transform: uppercase; }
+.doc-provide-head { color: #c0392b !important; border-bottom-color: #e0b4ae !important; }
+ul.doc-provide { list-style: none; padding-left: 0; margin: 0; }
+ul.doc-provide li { margin-bottom: .45rem; padding-left: .9rem; text-indent: -.9rem; }
+ul.doc-provide li::before { content: "– "; }
+.doc-soft { color: #666e80; font-weight: 400; }
+.doc-stage svg { max-width: 100%; height: auto; }
+
+/* Plan de cabine à l'écran */
+.stage-svg { display: block; width: 100%; height: auto; }
+.stage-svg text { stroke: none; font-family: var(--font); }
+
 /* Roue Camelot */
 .wheel-wrap { display: grid; place-items: center; }
 .wheel { width: min(100%, 460px); height: auto; }
@@ -469,7 +483,7 @@ td.num, th.num { text-align: right; font-family: var(--mono); }
 /* La règle globale `svg { stroke: currentColor }` se transmet aux enfants :
    sans cette remise à zéro, les zones de clic transparentes apparaîtraient
    comme des anneaux clairs par-dessus les libellés de ports. */
-.patch-svg { display: block; max-width: 100%; stroke: none; }
+.patch-svg, .stage-svg { display: block; max-width: 100%; stroke: none; }
 .patch-svg text { stroke: none; font-family: var(--font); }
 .patch-svg .patch-title { font-family: var(--font); }
 .patch-svg .patch-port { transition: r .12s; }
