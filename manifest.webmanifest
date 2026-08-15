@@ -1,0 +1,26 @@
+{
+  "name": "DJ Pool Tech — La boîte à outils du DJ",
+  "short_name": "DJ Pool Tech",
+  "description": "Fiche technique, rider, analyse BPM et clef, tap tempo, roue Camelot, setlist : tous les outils du DJ, dans le navigateur et hors ligne.",
+  "lang": "fr",
+  "dir": "ltr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0b0d12",
+  "theme_color": "#0b0d12",
+  "categories": ["music", "productivity", "utilities"],
+  "icons": [
+    { "src": "./assets/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "./assets/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "./assets/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "./assets/icon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ],
+  "shortcuts": [
+    { "name": "Analyse BPM & clef", "url": "./#/analyse" },
+    { "name": "Tap tempo", "url": "./#/tap" },
+    { "name": "Fiche technique", "url": "./#/fiche-technique" },
+    { "name": "Timer de set", "url": "./#/timer" }
+  ]
+}

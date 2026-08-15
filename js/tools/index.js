@@ -1,0 +1,152 @@
+/**
+ * Catalogue des outils. Les modules sont chargés à la demande :
+ * le premier affichage reste léger, y compris en 4G.
+ */
+
+const lazy = (loader) => async (el) => (await loader()).default(el);
+
+export const GROUPS = [
+  { id: 'main',   label: '' },
+  { id: 'mix',    label: 'Analyse & mix' },
+  { id: 'set',    label: 'Préparation du set' },
+  { id: 'docs',   label: 'Documents' },
+];
+
+export const TOOLS = [
+  {
+    id: 'accueil',
+    title: 'Accueil',
+    short: 'Accueil',
+    icon: 'home',
+    group: 'main',
+    heading: 'La boîte à outils du DJ',
+    desc: "Analyse, préparation de set et documents professionnels — tout fonctionne dans le navigateur, hors ligne, sans compte et sans envoyer vos fichiers sur un serveur.",
+    mount: lazy(() => import('./accueil.js')),
+  },
+  {
+    id: 'analyse',
+    title: 'Analyse BPM & clef',
+    short: 'Analyse',
+    icon: 'pulse',
+    group: 'mix',
+    eyebrow: 'Analyse automatique',
+    heading: 'Analyse BPM & clef',
+    desc: "Déposez un morceau : tempo, position du premier temps, tonalité et code Camelot sont calculés localement.",
+    mount: lazy(() => import('./analyse.js')),
+  },
+  {
+    id: 'tap',
+    title: 'Tap tempo',
+    short: 'Tap',
+    icon: 'tap',
+    group: 'mix',
+    eyebrow: 'Tempo manuel',
+    heading: 'Tap tempo',
+    desc: "Tapez la pulsation au rythme du morceau. Métronome intégré pour vérifier le résultat.",
+    mount: lazy(() => import('./tap.js')),
+  },
+  {
+    id: 'camelot',
+    title: 'Roue harmonique',
+    short: 'Camelot',
+    icon: 'wheel',
+    group: 'mix',
+    eyebrow: 'Mix harmonique',
+    heading: 'Roue Camelot',
+    desc: "Choisissez une clef : la roue affiche les enchaînements qui fonctionnent, du plus sûr au plus audacieux.",
+    mount: lazy(() => import('./camelot.js')),
+  },
+  {
+    id: 'pitch',
+    title: 'Pitch & tempo',
+    short: 'Pitch',
+    icon: 'sliders',
+    group: 'mix',
+    eyebrow: 'Calculateur',
+    heading: 'Pitch, tempo et transposition',
+    desc: "Quel pitch pour caler deux morceaux, et quelle clef obtenez-vous une fois la platine poussée ?",
+    mount: lazy(() => import('./pitch.js')),
+  },
+  {
+    id: 'delay',
+    title: 'Delay & LFO',
+    short: 'Delay',
+    icon: 'clock',
+    group: 'mix',
+    eyebrow: 'Calculateur',
+    heading: 'Temps de delay et de reverb',
+    desc: "Toutes les divisions rythmiques en millisecondes et en hertz pour régler vos effets dans le tempo.",
+    mount: lazy(() => import('./delay.js')),
+  },
+  {
+    id: 'setlist',
+    title: 'Setlist',
+    short: 'Setlist',
+    icon: 'list',
+    group: 'set',
+    eyebrow: 'Préparation',
+    heading: 'Setlist & enchaînements',
+    desc: "Construisez votre set, vérifiez la compatibilité harmonique et l'écart de tempo entre chaque titre.",
+    mount: lazy(() => import('./setlist.js')),
+  },
+  {
+    id: 'timer',
+    title: 'Timer de set',
+    short: 'Timer',
+    icon: 'timer',
+    group: 'set',
+    eyebrow: 'En cabine',
+    heading: 'Timer de set',
+    desc: "Compte à rebours plein écran avec alertes, pensé pour être lu d'un coup d'œil en cabine.",
+    mount: lazy(() => import('./timer.js')),
+  },
+  {
+    id: 'checklist',
+    title: 'Checklist matériel',
+    short: 'Check',
+    icon: 'check',
+    group: 'set',
+    eyebrow: 'Avant de partir',
+    heading: 'Checklist matériel',
+    desc: "Ne plus jamais oublier un adaptateur : listes types par type de prestation, personnalisables.",
+    mount: lazy(() => import('./checklist.js')),
+  },
+  {
+    id: 'profil',
+    title: 'Profil artiste',
+    short: 'Profil',
+    icon: 'note',
+    group: 'docs',
+    eyebrow: 'Identité',
+    heading: 'Profil artiste',
+    desc: "Saisi une seule fois, réutilisé automatiquement dans la fiche technique et le rider.",
+    mount: lazy(() => import('./profil.js')),
+  },
+  {
+    id: 'fiche-technique',
+    title: 'Fiche technique',
+    short: 'Fiche',
+    icon: 'doc',
+    group: 'docs',
+    eyebrow: 'Document',
+    heading: 'Générateur de fiche technique',
+    desc: "Le document que réclament les organisateurs : matériel, connectique, installation. Prêt à imprimer ou à exporter en PDF.",
+    mount: lazy(() => import('./fiche.js')),
+  },
+  {
+    id: 'rider',
+    title: 'Rider technique',
+    short: 'Rider',
+    icon: 'clipboard',
+    group: 'docs',
+    eyebrow: 'Document',
+    heading: 'Générateur de rider',
+    desc: "Rider complet : son, cabine, éclairage, planning, loges, transport et hébergement.",
+    mount: lazy(() => import('./rider.js')),
+  },
+];
+
+export const TOOL_MAP = Object.fromEntries(TOOLS.map((t) => [t.id, t]));
+
+/** Outils épinglés dans la barre inférieure (mobile). */
+export const QUICK_ACCESS = ['accueil', 'analyse', 'tap', 'camelot', 'fiche-technique'];

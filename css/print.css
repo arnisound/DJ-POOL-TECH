@@ -1,0 +1,68 @@
+/* =========================================================
+   Impression / export PDF (A4)
+   Le contenu à imprimer est injecté dans #print-root.
+   ========================================================= */
+
+@page {
+  size: A4;
+  margin: 14mm 13mm;
+}
+
+html, body {
+  background: #fff !important;
+  color: #000 !important;
+}
+
+/* On masque l'application, on ne garde que le document */
+.app, .toast-stack, .modal-root, .skip-link { display: none !important; }
+
+#print-root {
+  display: block !important;
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 10pt;
+  line-height: 1.45;
+  color: #000;
+}
+
+#print-root a { color: #000; text-decoration: none; }
+
+#print-root .doc-header {
+  display: flex; gap: 10mm; align-items: flex-start;
+  border-bottom: 1.4pt solid #000;
+  padding-bottom: 3mm; margin-bottom: 5mm;
+}
+#print-root .doc-header img { max-height: 22mm; max-width: 45mm; object-fit: contain; }
+#print-root .doc-header h1 { font-size: 19pt; margin: 0 0 1mm; letter-spacing: -.4pt; }
+#print-root .doc-header .doc-sub { font-size: 8pt; letter-spacing: 1.6pt; text-transform: uppercase; color: #444; font-weight: 700; }
+
+#print-root .doc-section { margin-bottom: 4.5mm; break-inside: avoid; page-break-inside: avoid; }
+#print-root .doc-section > h2 {
+  font-size: 8.5pt; text-transform: uppercase; letter-spacing: 1.2pt;
+  border-bottom: .5pt solid #999; padding-bottom: 1mm; margin: 0 0 2mm; color: #111;
+}
+#print-root .doc-section.break-before { break-before: page; page-break-before: always; }
+
+#print-root .doc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1mm 8mm; }
+#print-root .doc-kv { display: flex; gap: 2mm; font-size: 9.5pt; }
+#print-root .doc-kv b { min-width: 26mm; color: #333; font-weight: 600; }
+
+#print-root table { width: 100%; border-collapse: collapse; font-size: 9pt; }
+#print-root th, #print-root td { border-bottom: .4pt solid #bbb; padding: 1.2mm 1.5mm; text-align: left; }
+#print-root th { font-size: 7.5pt; text-transform: uppercase; letter-spacing: .8pt; color: #444; }
+
+#print-root ul { margin: 0; padding-left: 5mm; }
+#print-root li { margin-bottom: .6mm; break-inside: avoid; }
+
+#print-root .doc-note {
+  background: #f1f1f5; border-left: 2pt solid #000;
+  padding: 2mm 3mm; font-size: 9pt; break-inside: avoid;
+}
+
+#print-root .doc-foot {
+  margin-top: 6mm; padding-top: 2mm; border-top: .5pt solid #999;
+  font-size: 7.5pt; color: #555;
+}
+
+#print-root .doc-signature { display: flex; gap: 12mm; margin-top: 8mm; break-inside: avoid; }
+#print-root .doc-signature > div { flex: 1; }
+#print-root .doc-signature .line { border-bottom: .5pt solid #000; height: 16mm; margin-bottom: 1.5mm; }
