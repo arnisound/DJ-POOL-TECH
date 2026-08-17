@@ -1,6 +1,6 @@
 /** Plan de câblage : éditeur visuel du schéma de branchement. */
 import { h, clear, segmented } from '../core/dom.js';
-import { modal, confirmDialog, promptDialog, toast, toastOk, toastErr, printDocument, downloadJSON } from '../core/ui.js';
+import { modal, confirmDialog, promptDialog, toast, toastOk, toastErr, printDocument, downloadJSON, pickFile, readDataURL } from '../core/ui.js';
 import * as store from '../core/store.js';
 import { escapeHtml, slugify } from '../core/text.js';
 import { GEAR_MAP, CATEGORIES, gearByCategory } from '../core/gear.js';
@@ -10,7 +10,10 @@ import {
   cableList, describeLink, nodeLabel, validate, renderPlan, planBounds, planToPrintSVG,
   allPlans, savePlan, deletePlan,
 } from '../core/patch.js';
-import { SLOTS, defaultSlot, renderStagePlot, providedLists } from '../core/stageplot.js';
+import {
+  SLOTS, defaultSlot, renderStagePlot, providedLists,
+  autoArrange, stageState, stageBounds, nodeStageSize, GRID,
+} from '../core/stageplot.js';
 import { boothDocument } from '../core/booth-doc.js';
 
 const CUR_KEY = 'cablage.courant';
@@ -29,6 +32,7 @@ export default function mount(el) {
   let zoom = 0;                  // 0 = ajusté à la largeur
   let dragging = null;
   let view = store.load('cablage.vue', 'cabine');   // 'cabine' | 'cablage'
+  let selected = null;             // appareil sélectionné dans le plan de cabine
 
   const canvas = h('div.patch-canvas');
   const headerHost = h('div');
@@ -42,17 +46,20 @@ export default function mount(el) {
     h('button.btn.btn-sm', { type: 'button', text: '+', title: 'Agrandir', on: { click: () => setZoom(1) } })
   );
 
+  const stageTools = h('div.row.tight', { style: { marginBottom: '.6rem' } });
+
   el.appendChild(h('div.card', null,
     h('div.card-head', null,
       segmented(
         [{ value: 'cabine', label: 'Plan de cabine' }, { value: 'cablage', label: 'Schéma de câblage' }],
         view,
-        (v) => { view = v; store.save('cablage.vue', v); pendingPort = null; renderCanvas(); renderSide(); }
+        (v) => { view = v; store.save('cablage.vue', v); pendingPort = null; selected = null; renderCanvas(); renderSide(); }
       ),
       h('span.spacer', { style: { marginLeft: 'auto' } }),
       zoomRow
     ),
     canvasHint,
+    stageTools,
     canvas
   ));
   el.appendChild(sideHost);
@@ -214,9 +221,18 @@ export default function mount(el) {
     }
 
     if (view === 'cabine') {
-      canvas.appendChild(renderStagePlot(plan, { djLabel: djLabel() }));
+      renderStageTools();
+      canvas.appendChild(renderStagePlot(plan, {
+        interactive: true,
+        selected,
+        djLabel: djLabel(),
+        onNodePointerDown: startStageDrag,
+        onDjPointerDown: startDjDrag,
+        onSelect: (node) => { selected = node.id; renderSide(); },
+      }));
       return;
     }
+    clear(stageTools);
 
     canvas.appendChild(renderPlan(plan, {
       interactive: true,
@@ -231,6 +247,101 @@ export default function mount(el) {
   function djLabel() {
     const profile = loadProfile();
     return profile.artistName || 'DJ';
+  }
+
+  function renderStageTools() {
+    clear(stageTools);
+    const stage = stageState(plan);
+    const toggle = (label, on, onToggle) => h('button.btn.btn-sm', {
+      type: 'button', text: label, class: on ? 'btn-primary' : '',
+      on: { click: () => { onToggle(); persist(); renderCanvas(); } },
+    });
+
+    stageTools.appendChild(h('button.btn.btn-sm', {
+      type: 'button', text: '⤢ Ranger automatiquement',
+      title: 'Replace tout le matériel proprement',
+      on: {
+        click: () => {
+          autoArrange(plan);
+          persist();
+          renderCanvas();
+          toastOk('Matériel rangé');
+        },
+      },
+    }));
+    stageTools.appendChild(toggle('Silhouette du DJ', stage.showDj, () => { stage.showDj = !stage.showDj; }));
+    stageTools.appendChild(toggle('Liaisons réseau', stage.showLinks, () => { stage.showLinks = !stage.showLinks; }));
+    if (selected) {
+      const node = plan.nodes.find((n) => n.id === selected);
+      if (node) stageTools.appendChild(h('span.badge.badge-accent', { text: `Sélection : ${nodeLabel(node)}` }));
+    }
+  }
+
+  /**
+   * Glisser-déposer dans le plan de cabine : la position est libre, alignée
+   * sur une grille de 10 unités pour garder des rangées nettes.
+   */
+  function startStageDrag(node, event) {
+    event.preventDefault();
+    const svgEl = canvas.querySelector('svg');
+    if (!svgEl) return;
+
+    const rect = svgEl.getBoundingClientRect();
+    const box = stageBounds(plan);
+    const scale = box.width / (rect.width || 1);
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const origX = node.sx;
+    const origY = node.sy;
+    let frame = 0;
+
+    const move = (ev) => {
+      node.sx = Math.round((origX + (ev.clientX - startX) * scale) / GRID) * GRID;
+      node.sy = Math.round((origY + (ev.clientY - startY) * scale) / GRID) * GRID;
+      if (!frame) frame = requestAnimationFrame(() => { frame = 0; renderCanvas(); });
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
+      cancelAnimationFrame(frame);
+      persist();
+      renderCanvas();
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
+  }
+
+  function startDjDrag(event) {
+    event.preventDefault();
+    const svgEl = canvas.querySelector('svg');
+    if (!svgEl) return;
+    const stage = stageState(plan);
+    const rect = svgEl.getBoundingClientRect();
+    const box = stageBounds(plan);
+    const scale = box.width / (rect.width || 1);
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const orig = { ...stage.dj };
+    let frame = 0;
+
+    const move = (ev) => {
+      stage.dj = {
+        x: Math.round((orig.x + (ev.clientX - startX) * scale) / GRID) * GRID,
+        y: Math.round((orig.y + (ev.clientY - startY) * scale) / GRID) * GRID,
+      };
+      if (!frame) frame = requestAnimationFrame(() => { frame = 0; renderCanvas(); });
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      cancelAnimationFrame(frame);
+      persist();
+      renderCanvas();
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
   }
 
   function handlePortClick(node, port) {
@@ -367,7 +478,8 @@ export default function mount(el) {
       const gear = GEAR_MAP[node.gearId];
 
       // Emplacement dans la cabine
-      const slotSelect = h('select', { style: { minWidth: '120px', minHeight: '34px', fontSize: '.8rem' } });
+      const compact = { width: 'auto', minWidth: '118px', minHeight: '32px', fontSize: '.78rem', padding: '.25rem 1.6rem .25rem .5rem' };
+      const slotSelect = h('select', { style: compact, title: 'Emplacement dans la cabine' });
       for (const [id, slot] of Object.entries(SLOTS)) {
         slotSelect.appendChild(h('option', { value: id, text: slot.label }));
       }
@@ -378,7 +490,7 @@ export default function mount(el) {
       });
 
       // Qui fournit le matériel : alimente la liste du rider
-      const byWhom = h('select', { style: { minWidth: '120px', minHeight: '34px', fontSize: '.8rem' } });
+      const byWhom = h('select', { style: compact, title: 'Qui fournit ce matériel' });
       byWhom.appendChild(h('option', { value: 'promoter', text: 'Organisateur' }));
       byWhom.appendChild(h('option', { value: 'artist', text: 'Artiste' }));
       byWhom.value = node.provided || gear?.provided || 'promoter';
@@ -399,16 +511,57 @@ export default function mount(el) {
         persist(); renderCanvas(); renderSide();
       };
 
+      // Réglages d'apparence dans le plan de cabine
+      const scaleAt = (factor) => {
+        node.scale = Math.max(0.5, Math.min(2.2, Number(((node.scale || 1) * factor).toFixed(2))));
+        persist(); renderCanvas();
+      };
+
+      const imageBtn = h('button.btn.btn-sm', {
+        type: 'button',
+        text: node.image ? '🖼 Changer' : '🖼 Photo',
+        title: 'Utiliser une photo de l’appareil à la place du dessin',
+        on: {
+          click: async () => {
+            const file = await pickFile('image/png,image/jpeg,image/webp,image/svg+xml');
+            if (!file) return;
+            if (file.size > 1200 * 1024) {
+              toastErr('Image trop lourde (1,2 Mo maximum) — réduisez-la avant de l’ajouter.');
+              return;
+            }
+            node.image = await readDataURL(file);
+            persist(); renderCanvas(); renderSide();
+            toastOk('Photo ajoutée au plan');
+          },
+        },
+      });
+
       nodesCard.appendChild(h('div.list-item', { style: { flexWrap: 'wrap' } },
         h('span', { style: { width: '8px', height: '32px', borderRadius: '3px', background: catColor(gear), flex: 'none' } }),
         h('div.grow', null,
-          h('div.ttl', { text: nodeLabel(node) }),
-          h('div.tiny.muted', { text: gear ? gear.note : 'Appareil inconnu' }),
-          h('div.row.tight', { style: { marginTop: '.4rem' } },
-            h('span.tiny.muted', { text: 'Place :' }), slotSelect,
-            h('span.tiny.muted', { text: 'Fourni par :' }), byWhom,
-            h('button.btn.btn-sm.btn-ghost', { type: 'button', text: '◀', title: 'Vers la gauche', on: { click: () => move(-1) } }),
-            h('button.btn.btn-sm.btn-ghost', { type: 'button', text: '▶', title: 'Vers la droite', on: { click: () => move(1) } })
+          h('div.ttl', { text: nodeLabel(node), title: gear ? gear.note : 'Appareil inconnu' }),
+          h('div.row.tight', { style: { marginTop: '.3rem', rowGap: '.3rem' } },
+            slotSelect, byWhom,
+            h('button.btn.btn-sm.btn-ghost', { type: 'button', text: '◀', title: 'Reculer dans la rangée', on: { click: () => move(-1) } }),
+            h('button.btn.btn-sm.btn-ghost', { type: 'button', text: '▶', title: 'Avancer dans la rangée', on: { click: () => move(1) } }),
+            imageBtn,
+            node.image ? h('button.btn.btn-sm.btn-ghost', {
+              type: 'button', text: '✕ photo', title: 'Revenir au dessin',
+              on: { click: () => { node.image = ''; persist(); renderCanvas(); renderSide(); } },
+            }) : null,
+            h('button.btn.btn-sm.btn-ghost', { type: 'button', text: '−', title: 'Réduire', on: { click: () => scaleAt(1 / 1.15) } }),
+            h('span.tiny.muted.mono', { text: `${Math.round((node.scale || 1) * 100)}%` }),
+            h('button.btn.btn-sm.btn-ghost', { type: 'button', text: '+', title: 'Agrandir', on: { click: () => scaleAt(1.15) } }),
+            h('button.btn.btn-sm.btn-ghost', {
+              type: 'button', text: '⇄', title: 'Retourner (miroir)',
+              on: { click: () => { node.flip = !node.flip; persist(); renderCanvas(); } },
+            }),
+            h('button.btn.btn-sm.btn-ghost', {
+              type: 'button',
+              text: node.hidden ? '◻' : '◼',
+              title: node.hidden ? 'Masqué dans le plan de cabine' : 'Visible dans le plan de cabine',
+              on: { click: () => { node.hidden = !node.hidden; persist(); renderCanvas(); renderSide(); } },
+            })
           )
         ),
         h('button.btn.btn-sm.btn-ghost', {

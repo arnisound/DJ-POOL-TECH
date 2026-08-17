@@ -7,7 +7,11 @@
  */
 import { GEAR, GEAR_MAP, CONNECTORS, CATEGORIES, checkConnection, findPort, splitPorts } from '../js/core/gear.js';
 import { PRESETS, validate, cableList, cableCount, addLink, emptyPlan, addNode } from '../js/core/patch.js';
-import { layout, defaultSlot, providedLists, SLOTS } from '../js/core/stageplot.js';
+import {
+  layout, defaultSlot, providedLists, SLOTS,
+  autoArrange, ensurePositions, stageState, nodeStageSize, visibleNodes, stageBounds, GRID,
+} from '../js/core/stageplot.js';
+import { SHAPES, shapeOf } from '../js/core/stage-shapes.js';
 
 let passed = 0;
 let failed = 0;
@@ -181,6 +185,61 @@ console.log('\nPlan de cabine');
   mixerNode.provided = 'artist';
   check('le fournisseur peut être changé appareil par appareil',
     providedLists(plan).artist.some((e) => /DJM-900NXS2/.test(e.label)));
+}
+
+console.log('\nPositionnement libre');
+{
+  const plan = PRESETS.club3hub.build();
+  autoArrange(plan);
+
+  const placed = plan.nodes.every((n) => Number.isFinite(n.sx) && Number.isFinite(n.sy));
+  check('le rangement automatique place tout le matériel', placed);
+  check('les positions sont alignées sur la grille',
+    plan.nodes.every((n) => n.sx % GRID === 0 && n.sy % GRID === 0));
+
+  const booth = plan.nodes.filter((n) => (n.slot || defaultSlot(n.gearId)) === 'booth');
+  const bottoms = booth.map((n) => n.sy + nodeStageSize(n).height);
+  check('la rangée de cabine repose sur un même plan',
+    Math.max(...bottoms) - Math.min(...bottoms) <= GRID, `écart de ${Math.max(...bottoms) - Math.min(...bottoms)}`);
+
+  const stage = stageState(plan);
+  check('la silhouette du DJ est positionnée', Number.isFinite(stage.dj?.x));
+
+  // Une position choisie à la main survit à l'ajout d'un appareil.
+  const mixer = plan.nodes.find((n) => n.gearId === 'djm900');
+  mixer.sx = 777;
+  mixer.sy = 333;
+  const added = addNode(plan, 'recorder');
+  ensurePositions(plan);
+  check('une position manuelle n’est pas écrasée', mixer.sx === 777 && mixer.sy === 333);
+  check('un appareil ajouté reçoit une position', Number.isFinite(added.sx) && Number.isFinite(added.sy));
+
+  // Échelle et visibilité
+  const cdj = plan.nodes.find((n) => n.gearId === 'cdj3000');
+  const base = shapeOf('player');
+  check('la taille par défaut suit le type d’appareil',
+    nodeStageSize(cdj).width === base.w && nodeStageSize(cdj).height === base.h);
+  cdj.scale = 1.5;
+  check('l’échelle agrandit l’appareil', nodeStageSize(cdj).width === base.w * 1.5);
+
+  const visibleBefore = visibleNodes(plan).length;
+  cdj.hidden = true;
+  check('un appareil masqué disparaît du plan', visibleNodes(plan).length === visibleBefore - 1);
+  cdj.hidden = false;
+
+  const box = stageBounds(plan);
+  check('le cadrage englobe tout le contenu', box.width > 300 && box.height > 200,
+    `${Math.round(box.width)} × ${Math.round(box.height)}`);
+
+  // Le matériel hors cabine n'est pas dessiné.
+  const foh = plan.nodes.find((n) => n.gearId === 'foh');
+  check('la façade reste hors du plan de cabine', !visibleNodes(plan).some((n) => n.id === foh.id));
+
+  check('chaque type de dessin a un encombrement', Object.values(SHAPES).every((s) => s.w > 0 && s.h > 0));
+  const icons = new Set(GEAR.map((g) => g.icon));
+  check('tous les dessins utilisés sont connus',
+    [...icons].every((i) => SHAPES[i] || i === 'box'),
+    [...icons].filter((i) => !SHAPES[i]).join(', '));
 }
 
 console.log(`\n${passed} test(s) réussi(s), ${failed} échec(s).\n`);

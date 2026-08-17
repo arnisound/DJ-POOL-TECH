@@ -805,10 +805,10 @@ export const GEAR = [
     ],
   },
   {
-    id: 'booth', label: 'Retours de cabine (avec sub)', short: 'Retours cabine', category: 'sound',
+    id: 'booth', label: 'Enceinte de retour de cabine', short: 'Retour cabine', category: 'sound',
     icon: 'speaker', units: 1, provided: 'promoter',
-    req: "de forte puissance, dirigés vers le DJ à hauteur d'oreille",
-    note: 'Deux enceintes de forte puissance dirigées vers le DJ, à hauteur d’oreille, niveau indépendant de la façade.',
+    req: "de forte puissance, dirigée vers le DJ à hauteur d'oreille",
+    note: 'Enceinte de forte puissance dirigée vers le DJ, à hauteur d’oreille, sur un niveau indépendant de la façade.',
     ports: [p('in', 'ENTRÉE', 'xlr', 'in', { pair: true }), powerIn()],
   },
   {

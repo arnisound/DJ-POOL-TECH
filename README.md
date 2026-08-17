@@ -33,7 +33,7 @@ et reste utilisable **hors ligne**, en cabine comme en sous-sol.
 
 | Outil | Ce qu'il fait |
 |---|---|
-| **Plan de câblage** | Deux vues d'une même installation : le **plan de cabine** (la disposition physique, telle qu'elle apparaît sur un rider professionnel) et le **schéma de câblage** (port par port). L'application vérifie la cohérence des branchements et dresse la liste des câbles à emporter. Huit configurations types prêtes à l'emploi. |
+| **Plan de câblage** | Deux vues d'une même installation : le **plan de cabine** (disposition physique, chaque appareil placé où l'on veut, avec sa photo si on le souhaite) et le **schéma de câblage** (port par port). L'application vérifie la cohérence des branchements et dresse la liste des câbles à emporter. Huit configurations types prêtes à l'emploi. |
 | **Performeurs** | Saxophoniste, chanteur, percussionniste, VJ… Chaque performeur apporte ses besoins (micro, DI, retour, pied, 48 V, espace) et sa ligne dans la patch list. |
 
 ### Documents
@@ -116,7 +116,8 @@ js/
     setlists.js         modèle de setlist
     gear.js             catalogue du matériel et de sa connectique
     patch.js            plan de câblage : modèle, contrôles, rendu SVG
-    stageplot.js        plan de cabine : disposition physique et rendu
+    stageplot.js        plan de cabine : positions, rangement, rendu
+    stage-shapes.js     dessins du matériel vu de dessus
     booth-doc.js        page « l'organisateur doit fournir »
     performers.js       performeurs et liste des lignes
     playlist-import.js  import Rekordbox, Traktor, Serato, Engine, M3U
@@ -146,12 +147,24 @@ de ce qu'il doit fournir, celle de ce que l'artiste apporte, puis la vue
 physique de l'installation — la rangée de matériel, la silhouette du DJ, les
 retours de part et d'autre, le réseau au-dessus, le micro devant.
 
-Chaque appareil du plan porte deux informations qui alimentent ce document :
-son **emplacement** dans la cabine (sur la table, à gauche, devant…), déduit de
-sa catégorie et rectifiable d'un menu ; et **qui le fournit**, l'organisateur ou
+**On place le matériel où l'on veut.** Chaque appareil se déplace au doigt ou à
+la souris sur le plan, s'agrandit, se retourne en miroir, se masque. La
+silhouette du DJ se déplace aussi. Un bouton « ranger automatiquement » remet
+tout d'aplomb : rangée de cabine centrée et alignée sur le plan de la table,
+retours de part et d'autre, réseau au-dessus, micros devant.
+
+**Chaque appareil peut porter une photo.** Le dessin vectoriel par défaut est
+volontairement sobre et reconnaissable, mais on peut lui substituer une photo —
+celle du constructeur ou la sienne — importée depuis l'appareil. Elle est
+stockée localement et se retrouve telle quelle dans le PDF. Aucune image de
+matériel n'est livrée avec l'application : les visuels constructeur sont
+protégés, c'est donc à chacun de fournir les siennes s'il en veut.
+
+Deux informations par appareil alimentent le document : son **emplacement**
+(sur la table, à gauche, devant…) et **qui le fournit**, l'organisateur ou
 l'artiste, ce qui répartit automatiquement les deux listes.
 
-Le schéma est vectoriel : il reste net à l'impression, et le PDF tient sur une
+Le rendu est vectoriel : il reste net à l'impression et le PDF tient sur une
 page.
 
 ---
@@ -245,7 +258,9 @@ du désaccord.
 uniques, types de connecteurs connus, chaque mixeur DJ doté d'une sortie
 générale et d'une sortie cabine), la connectique relevée sur les documentations,
 les règles de branchement, la construction des huit configurations types, le
-comptage des câbles et la composition du plan de cabine.
+comptage des câbles, la composition du plan de cabine et le positionnement
+libre — alignement sur la grille, rangée posée sur un même plan, respect d'une
+position choisie à la main, échelle, masquage et cadrage.
 
 `tests/playlist.test.mjs` vérifie l'import sur des échantillons reproduisant la
 structure réelle des exports : XML Rekordbox (avec entités et ordre de

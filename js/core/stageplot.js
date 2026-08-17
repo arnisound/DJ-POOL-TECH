@@ -1,29 +1,33 @@
 /**
  * Plan de cabine — la vue physique de l'installation, telle qu'on la trouve
- * dans les riders professionnels : la rangée de matériel vue de dessus, le
- * DJ derrière, les retours de part et d'autre, le réseau au-dessus.
+ * dans les riders professionnels.
  *
- * C'est un autre regard sur le même plan que le schéma de câblage : les
- * appareils sont les mêmes, seule leur disposition change. Chaque appareil
- * porte un emplacement (`slot`) et un rang (`order`) déduits de sa catégorie,
- * que l'utilisateur peut corriger.
+ * Chaque appareil porte sa propre position (`sx`, `sy`), son échelle et son
+ * orientation : on le pose où l'on veut. Un rangement automatique replace
+ * tout proprement quand on veut repartir d'une base saine, à partir d'un
+ * emplacement (`slot`) déduit de la catégorie du matériel.
  */
-import { GEAR_MAP, CATEGORIES } from './gear.js';
+import { GEAR_MAP } from './gear.js';
 import { nodeLabel } from './patch.js';
+import { SHAPES, shapeOf, drawShape, drawImage, drawDj } from './stage-shapes.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
-/** Emplacements possibles dans la cabine. */
+/** Taille du plateau de travail, en unités du plan. */
+export const STAGE_W = 1300;
+export const STAGE_H = 860;
+export const GRID = 10;
+
+/** Emplacements utilisés par le rangement automatique. */
 export const SLOTS = {
   above: { label: 'Au-dessus', hint: 'Réseau, écrans, structures' },
   booth: { label: 'Sur la table', hint: 'Lecteurs, mixeur, ordinateur' },
   left:  { label: 'À gauche', hint: 'Retour, enceinte' },
   right: { label: 'À droite', hint: 'Retour, enceinte' },
   front: { label: 'Devant', hint: 'Micro, instruments, praticable' },
-  out:   { label: 'Hors cabine', hint: 'Façade, régie, matériel non représenté' },
+  out:   { label: 'Hors cabine', hint: 'Façade, régie — non dessiné' },
 };
 
-/** Emplacement par défaut d'un appareil, d'après sa catégorie. */
 export function defaultSlot(gearId) {
   const gear = GEAR_MAP[gearId];
   if (!gear) return 'booth';
@@ -41,35 +45,116 @@ export function defaultSlot(gearId) {
   }
 }
 
+/** Réglages de scène du plan, créés au besoin. */
+export function stageState(plan) {
+  if (!plan.stage) plan.stage = {};
+  const s = plan.stage;
+  if (s.showDj === undefined) s.showDj = true;
+  if (s.showLinks === undefined) s.showLinks = true;
+  if (!s.dj) s.dj = null;
+  return s;
+}
+
+/** Dimensions d'un appareil sur le plan, échelle comprise. */
+export function nodeStageSize(node) {
+  const gear = GEAR_MAP[node.gearId];
+  const base = shapeOf(gear?.icon);
+  const scale = node.scale || 1;
+  return { width: base.w * scale, height: base.h * scale };
+}
+
 /**
- * Répartit les appareils du plan par emplacement, en respectant les choix
- * explicites de l'utilisateur (`node.slot`, `node.order`).
+ * Replace tout le matériel proprement : rangée de cabine centrée, retours
+ * de part et d'autre, réseau au-dessus, micros devant.
  */
-export function layout(plan) {
-  const slots = { above: [], booth: [], left: [], right: [], front: [], out: [] };
+export function autoArrange(plan) {
+  const stage = stageState(plan);
+  const groups = { above: [], booth: [], left: [], right: [], front: [], out: [] };
 
   plan.nodes.forEach((node, i) => {
     const slot = node.slot || defaultSlot(node.gearId);
-    (slots[slot] || slots.booth).push({ node, order: node.order ?? i });
+    (groups[slot] || groups.booth).push({ node, order: node.order ?? i });
+  });
+  for (const key of Object.keys(groups)) {
+    groups[key].sort((a, b) => a.order - b.order);
+    groups[key] = groups[key].map((e) => e.node);
+  }
+
+  const rowWidth = (list, gap) =>
+    list.reduce((s, n) => s + nodeStageSize(n).width + gap, 0) - gap;
+
+  /**
+   * Place une rangée centrée. `align` vaut 'bottom' pour la table de cabine
+   * — le matériel y repose sur un même plan — et 'middle' ailleurs.
+   */
+  const place = (list, y, { gap = 16, align = 'middle' } = {}) => {
+    const width = rowWidth(list, gap);
+    let x = (STAGE_W - width) / 2;
+    for (const node of list) {
+      const size = nodeStageSize(node);
+      node.sx = Math.round(x / GRID) * GRID;
+      node.sy = Math.round((align === 'bottom' ? y - size.height : y - size.height / 2) / GRID) * GRID;
+      x += size.width + gap;
+    }
+    return width;
+  };
+
+  const boothY = 400;          // ligne du plan de travail
+  place(groups.booth, boothY, { align: 'bottom' });
+  place(groups.above, 120);
+  place(groups.front, 660);
+
+  const boothWidth = rowWidth(groups.booth, 16) || 400;
+  const leftEdge = (STAGE_W - boothWidth) / 2;
+
+  groups.left.forEach((node, i) => {
+    const size = nodeStageSize(node);
+    node.sx = Math.round((leftEdge - 70 - size.width) / GRID) * GRID;
+    node.sy = Math.round((boothY - size.height + i * (size.height + 60)) / GRID) * GRID;
+  });
+  groups.right.forEach((node, i) => {
+    const size = nodeStageSize(node);
+    node.sx = Math.round((leftEdge + boothWidth + 70) / GRID) * GRID;
+    node.sy = Math.round((boothY - size.height + i * (size.height + 60)) / GRID) * GRID;
   });
 
-  for (const key of Object.keys(slots)) {
-    slots[key].sort((a, b) => a.order - b.order);
-    slots[key] = slots[key].map((entry) => entry.node);
-  }
+  // Le matériel « hors cabine » est rangé en bas, discrètement.
+  groups.out.forEach((node, i) => {
+    node.sx = 30 + i * 130;
+    node.sy = STAGE_H - 120;
+    node.hidden = node.hidden ?? true;
+  });
 
-  // Un seul retour de cabine placé à gauche est en réalité une paire :
-  // on le représente des deux côtés, comme sur les riders.
-  if (slots.left.length && !slots.right.length) {
-    const pair = slots.left.find((n) => GEAR_MAP[n.gearId]?.id === 'booth');
-    if (pair) slots.right.push({ ...pair, id: pair.id + ':miroir', mirrored: true });
-  }
+  stage.dj = { x: STAGE_W / 2 - 70, y: boothY + 34 };
+  return plan;
+}
 
-  return slots;
+/** Complète les positions manquantes sans déranger celles déjà choisies. */
+export function ensurePositions(plan) {
+  const stage = stageState(plan);
+  const missing = plan.nodes.filter((n) => n.sx === undefined || n.sy === undefined);
+  if (!missing.length && stage.dj) return plan;
+  if (missing.length === plan.nodes.length || !stage.dj) return autoArrange(plan);
+
+  // Quelques appareils seulement : on les dépose sur une place libre.
+  let x = 30;
+  let y = STAGE_H - 200;
+  for (const node of missing) {
+    node.sx = x;
+    node.sy = y;
+    x += nodeStageSize(node).width + 20;
+    if (x > STAGE_W - 150) { x = 30; y -= 170; }
+  }
+  return plan;
+}
+
+/** Appareils réellement dessinés, dans l'ordre d'empilement. */
+export function visibleNodes(plan) {
+  return plan.nodes.filter((n) => !n.hidden && (n.slot || defaultSlot(n.gearId)) !== 'out');
 }
 
 /* ------------------------------------------------------------------ *
- * Dessin
+ * Rendu
  * ------------------------------------------------------------------ */
 
 const el = (name, attrs = {}) => {
@@ -89,197 +174,192 @@ const text = (str, attrs) => {
 function palette(mode) {
   if (mode === 'print') {
     return {
-      body: '#1a1c22', face: '#e9ebf2', edge: '#333', label: '#2b3a8f',
-      sub: '#555', dj: '#1a1c22', skin: '#c9a08a', link: '#4a6fd8', dash: '#666',
+      body: '#1c1e26', detail: '#e7eaf2', slot: '#4a505f', screen: '#3a4152',
+      edge: '#111', accent: '#8fa2d8', label: '#25336f', sub: '#555',
+      dj: '#1c1e26', skin: '#c9a08a', cans: '#7a828f', link: '#4a6fd8', grid: '#eef0f6',
+      silhouette: '#1c1e26', silhouetteDetail: '#e7eaf2',
     };
   }
   const light = document.documentElement.dataset.theme === 'light';
   return light
-    ? { body: '#242938', face: '#e9ebf2', edge: '#9aa4bd', label: '#3b3ecc', sub: '#5b6580', dj: '#242938', skin: '#c9a08a', link: '#4a6fd8', dash: '#8792ab' }
-    : { body: '#0f131e', face: '#2b3347', edge: '#4a5570', label: '#8fa6ff', sub: '#8792ab', dj: '#0b0d12', skin: '#c9a08a', link: '#6f8dff', dash: '#6f7b99' };
-}
-
-const UNIT = 86;      // largeur d'une « unité » de matériel
-const GAP = 14;
-const DEV_H = 150;
-
-/** Pictogrammes : chaque appareil est dessiné de dessus, en silhouette. */
-function drawDevice(g, gear, x, y, w, h, c) {
-  const face = el('rect', { x, y, width: w, height: h, rx: 7, fill: c.body, stroke: c.edge, 'stroke-width': 1.2 });
-  g.appendChild(face);
-
-  const cx = x + w / 2;
-  const inner = (dx, dy, dw, dh, extra = {}) =>
-    g.appendChild(el('rect', { x: x + dx, y: y + dy, width: dw, height: dh, rx: 3, fill: c.face, opacity: 0.85, ...extra }));
-  const circle = (ccx, ccy, r, opts = {}) =>
-    g.appendChild(el('circle', { cx: ccx, cy: ccy, r, fill: 'none', stroke: c.face, 'stroke-width': 2, opacity: 0.8, ...opts }));
-
-  switch (gear.icon) {
-    case 'player': {
-      inner(w * 0.12, 10, w * 0.76, h * 0.22);                 // écran
-      circle(cx, y + h * 0.62, Math.min(w, h) * 0.26);          // plateau
-      circle(cx, y + h * 0.62, Math.min(w, h) * 0.09);
-      inner(w * 0.08, h * 0.42, w * 0.1, h * 0.34, { rx: 2 });  // pitch
-      break;
+    ? {
+      body: '#252b3a', detail: '#e7eaf2', slot: '#59617a', screen: '#3d4557',
+      edge: '#aab3c8', accent: '#8fa2ff', label: '#3538c9', sub: '#5b6580',
+      dj: '#252b3a', skin: '#c9a08a', cans: '#7a828f', link: '#4a6fd8', grid: '#e6eaf5',
+      silhouette: '#252b3a', silhouetteDetail: '#e7eaf2',
     }
-    case 'turntable': {
-      circle(cx, y + h * 0.55, Math.min(w, h) * 0.33);
-      circle(cx, y + h * 0.55, 4, { fill: c.face });
-      inner(w * 0.72, h * 0.15, w * 0.2, h * 0.12, { rx: 2 });   // bras
-      inner(w * 0.08, h * 0.72, w * 0.12, h * 0.2, { rx: 2 });   // pitch
-      break;
-    }
-    case 'mixer': {
-      // Quatre voies : trois potentiomètres d'égaliseur puis un fader vertical.
-      for (let i = 0; i < 4; i++) {
-        const rel = w * (0.13 + i * 0.23);
-        for (let k = 0; k < 3; k++) circle(x + rel + w * 0.055, y + 18 + k * 15, 4.5);
-        inner(rel + w * 0.03, h * 0.52, w * 0.05, h * 0.32, { rx: 2 });
-      }
-      inner(w * 0.13, h * 0.91, w * 0.74, 6, { rx: 3 });          // crossfader
-      break;
-    }
-    case 'allinone':
-    case 'controller': {
-      circle(x + w * 0.2, y + h * 0.55, Math.min(w * 0.32, h * 0.3));
-      circle(x + w * 0.8, y + h * 0.55, Math.min(w * 0.32, h * 0.3));
-      inner(w * 0.42, 12, w * 0.16, h * 0.3);
-      for (let i = 0; i < 4; i++) inner(w * (0.4 + i * 0.05), h * 0.55, w * 0.025, h * 0.3, { rx: 1 });
-      break;
-    }
-    case 'laptop': {
-      inner(w * 0.1, 8, w * 0.8, h * 0.55, { rx: 4 });
-      g.appendChild(el('rect', { x: x + w * 0.05, y: y + h * 0.68, width: w * 0.9, height: h * 0.2, rx: 3, fill: c.face, opacity: 0.55 }));
-      break;
-    }
-    case 'speaker': {
-      g.appendChild(el('path', {
-        d: `M${x + w * 0.2} ${y + h * 0.3} L${x + w * 0.5} ${y + h * 0.12} L${x + w * 0.5} ${y + h * 0.88} L${x + w * 0.2} ${y + h * 0.7} Z`,
-        fill: c.face, opacity: 0.9,
-      }));
-      g.appendChild(el('path', {
-        d: `M${x + w * 0.5} ${y + h * 0.12} L${x + w * 0.85} ${y + h * 0.02} L${x + w * 0.85} ${y + h * 0.98} L${x + w * 0.5} ${y + h * 0.88} Z`,
-        fill: c.face, opacity: 0.55,
-      }));
-      break;
-    }
-    case 'wedge': {
-      g.appendChild(el('path', {
-        d: `M${x + w * 0.1} ${y + h * 0.85} L${x + w * 0.9} ${y + h * 0.85} L${x + w * 0.75} ${y + h * 0.3} L${x + w * 0.25} ${y + h * 0.3} Z`,
-        fill: c.face, opacity: 0.85,
-      }));
-      break;
-    }
-    case 'sub': {
-      circle(cx, y + h / 2, Math.min(w, h) * 0.3, { 'stroke-width': 3 });
-      circle(cx, y + h / 2, Math.min(w, h) * 0.12, { fill: c.face });
-      break;
-    }
-    case 'mic': {
-      inner(w * 0.42, h * 0.08, w * 0.16, h * 0.34, { rx: 8 });
-      inner(w * 0.47, h * 0.42, w * 0.06, h * 0.42, { rx: 2 });
-      inner(w * 0.32, h * 0.84, w * 0.36, h * 0.07, { rx: 3 });
-      break;
-    }
-    case 'hub': {
-      inner(w * 0.1, h * 0.3, w * 0.8, h * 0.4, { rx: 4 });
-      for (let i = 0; i < 5; i++) {
-        g.appendChild(el('rect', { x: x + w * (0.16 + i * 0.15), y: y + h * 0.42, width: w * 0.08, height: h * 0.16, fill: c.body, rx: 1 }));
-      }
-      break;
-    }
-    case 'screen': {
-      inner(w * 0.08, h * 0.12, w * 0.84, h * 0.6, { rx: 3 });
-      inner(w * 0.42, h * 0.74, w * 0.16, h * 0.1, { rx: 1 });
-      inner(w * 0.28, h * 0.86, w * 0.44, h * 0.06, { rx: 2 });
-      break;
-    }
-    case 'keys': {
-      for (let i = 0; i < 7; i++) inner(w * (0.08 + i * 0.12), h * 0.35, w * 0.1, h * 0.5, { rx: 1 });
-      for (let i = 0; i < 5; i++) {
-        g.appendChild(el('rect', { x: x + w * (0.16 + i * 0.12 + (i > 1 ? 0.06 : 0)), y: y + h * 0.35, width: w * 0.05, height: h * 0.3, fill: c.body }));
-      }
-      break;
-    }
-    case 'fx': {
-      circle(x + w * 0.3, y + h * 0.4, Math.min(w, h) * 0.14);
-      circle(x + w * 0.7, y + h * 0.4, Math.min(w, h) * 0.14);
-      inner(w * 0.15, h * 0.65, w * 0.7, h * 0.18, { rx: 3 });
-      break;
-    }
-    case 'power': {
-      for (let i = 0; i < 3; i++) {
-        circle(x + w * (0.25 + i * 0.25), y + h / 2, Math.min(w, h) * 0.1);
-      }
-      break;
-    }
-    case 'riser': {
-      g.appendChild(el('rect', { x: x + w * 0.06, y: y + h * 0.35, width: w * 0.88, height: h * 0.42, rx: 3, fill: c.face, opacity: 0.35, stroke: c.face, 'stroke-dasharray': '5 4' }));
-      break;
-    }
-    default: {
-      inner(w * 0.15, h * 0.3, w * 0.7, h * 0.4, { rx: 4 });
-    }
-  }
-}
-
-/** Enceinte de retour dans son encadré pointillé, comme sur les riders. */
-function drawMonitor(g, node, x, y, w, h, c, side) {
-  g.appendChild(el('rect', {
-    x, y, width: w, height: h, rx: 4,
-    fill: 'none', stroke: c.dash, 'stroke-width': 1.4, 'stroke-dasharray': '7 5',
-  }));
-  const gear = GEAR_MAP[node.gearId] || { icon: 'speaker' };
-  const flip = side === 'right';
-  const inner = el('g', flip ? { transform: `translate(${2 * (x + w / 2)} 0) scale(-1 1)` } : {});
-  drawDeviceFace(inner, gear, x + 12, y + 12, w - 24, h - 24, c);
-  g.appendChild(inner);
-}
-
-/** Silhouette d'enceinte sans le boîtier sombre (les retours sont dessinés en aplat). */
-function drawDeviceFace(g, gear, x, y, w, h, c) {
-  g.appendChild(el('path', {
-    d: `M${x + w * 0.05} ${y + h * 0.28} L${x + w * 0.45} ${y + h * 0.08} L${x + w * 0.45} ${y + h * 0.92} L${x + w * 0.05} ${y + h * 0.72} Z`,
-    fill: c.body,
-  }));
-  g.appendChild(el('path', {
-    d: `M${x + w * 0.45} ${y + h * 0.08} L${x + w * 0.95} ${y} L${x + w * 0.95} ${y + h} L${x + w * 0.45} ${y + h * 0.92} Z`,
-    fill: c.body, opacity: 0.75,
-  }));
-  g.appendChild(el('rect', { x: x + w * 0.62, y: y + h * 0.44, width: w * 0.16, height: h * 0.12, fill: c.face, opacity: 0.6 }));
+    : {
+      body: '#161b28', detail: '#dfe5f2', slot: '#39415a', screen: '#2b3347',
+      edge: '#4c5570', accent: '#7f96ff', label: '#93a8ff', sub: '#8792ab',
+      dj: '#0a0d14', skin: '#c9a08a', cans: '#6b7383', link: '#6f8dff', grid: '#1b2233',
+      silhouette: '#dfe5f2', silhouetteDetail: '#161b28',
+    };
 }
 
 /**
- * Silhouette du DJ, vue de dessus, devant la cabine.
- * Elle est placée sous la ligne des légendes : sur un rider, un nom
- * d'appareil masqué par un bras est un appel téléphonique de plus.
+ * Dessine le plan de cabine.
+ * @param {object} plan
+ * @param {object} opts
+ * @param {'screen'|'print'} [opts.mode]
+ * @param {boolean} [opts.interactive]
+ * @param {string|null} [opts.selected] identifiant de l'appareil sélectionné
+ * @param {string} [opts.djLabel]
+ * @param {(node, event)=>void} [opts.onNodePointerDown]
+ * @param {(event)=>void} [opts.onDjPointerDown]
+ * @param {(node)=>void} [opts.onSelect]
  */
-function drawDj(g, cx, y, c, label) {
-  const arm = (dx) => el('path', {
-    d: `M${cx + dx} ${y + 16} q${dx * 0.28} -10 ${dx * 0.46} -16`,
-    stroke: c.dj, 'stroke-width': 15, fill: 'none', 'stroke-linecap': 'round',
+export function renderStagePlot(plan, opts = {}) {
+  const {
+    mode = 'screen', interactive = false, selected = null,
+    djLabel = 'DJ', onNodePointerDown, onDjPointerDown, onSelect,
+  } = opts;
+
+  ensurePositions(plan);
+  const stage = stageState(plan);
+  const c = palette(mode);
+  const nodes = visibleNodes(plan);
+
+  // Le cadrage suit le contenu : pas de marges vides à l'impression.
+  const box = stageBounds(plan, mode === 'print' ? 26 : 16);
+
+  const svg = el('svg', {
+    viewBox: `${box.x} ${box.y} ${box.width} ${box.height}`,
+    class: 'stage-svg',
+    role: 'img',
+    'aria-label': `Plan de cabine : ${nodes.length} appareils`,
   });
-  g.appendChild(el('path', {
-    d: `M${cx - 62} ${y + 78} q0 -74 62 -74 q62 0 62 74 z`,
-    fill: c.dj,
-  }));
-  g.appendChild(arm(-46));
-  g.appendChild(arm(46));
-  g.appendChild(el('circle', { cx, cy: y + 40, r: 25, fill: c.skin }));
-  g.appendChild(el('rect', { x: cx - 27, y: y + 34, width: 54, height: 11, rx: 5, fill: c.dj }));
-  g.appendChild(el('circle', { cx: cx - 30, cy: y + 40, r: 9, fill: '#666e80' }));
-  g.appendChild(el('circle', { cx: cx + 30, cy: y + 40, r: 9, fill: '#666e80' }));
-  if (label) {
-    g.appendChild(text(label, {
-      x: cx, y: y + 96, 'text-anchor': 'middle', 'font-size': 11,
-      'font-weight': 700, fill: c.sub, 'letter-spacing': '.5',
-    }));
+
+  if (mode === 'screen') {
+    const defs = el('defs');
+    const pattern = el('pattern', { id: 'stage-grid', width: 40, height: 40, patternUnits: 'userSpaceOnUse' });
+    pattern.appendChild(el('path', { d: 'M40 0H0V40', fill: 'none', stroke: c.grid, 'stroke-width': 1 }));
+    defs.appendChild(pattern);
+    svg.appendChild(defs);
+    svg.appendChild(el('rect', { x: box.x, y: box.y, width: box.width, height: box.height, fill: 'url(#stage-grid)' }));
   }
+
+  /* --------------------------- Liaisons réseau --------------------------- */
+  if (stage.showLinks) {
+    const layer = el('g');
+    for (const link of plan.links) {
+      if (String(link.cable).split('>')[0] !== 'ethernet') continue;
+      const a = nodes.find((n) => n.id === link.from.node);
+      const b = nodes.find((n) => n.id === link.to.node);
+      if (!a || !b) continue;
+      const sa = nodeStageSize(a);
+      const sb = nodeStageSize(b);
+      const ax = a.sx + sa.width / 2;
+      const bx = b.sx + sb.width / 2;
+      const ay = a.sy + (a.sy < b.sy ? sa.height : 0);
+      const by = b.sy + (b.sy < a.sy ? sb.height : 0);
+      const mid = (ay + by) / 2;
+      layer.appendChild(el('path', {
+        d: `M${ax} ${ay} V${mid} H${bx} V${by}`,
+        fill: 'none', stroke: c.link, 'stroke-width': 1.6, opacity: 0.8,
+      }));
+    }
+    svg.appendChild(layer);
+  }
+
+  /* ------------------------------ Le DJ ------------------------------ */
+  if (stage.showDj && stage.dj) {
+    const djW = 140;
+    const djH = 120;
+    const g = el('g', { transform: `translate(${stage.dj.x} ${stage.dj.y})`, class: 'stage-dj' });
+    drawDj(g, djW, djH, c, djLabel);
+    if (interactive && onDjPointerDown) {
+      const handle = el('rect', {
+        x: 0, y: 0, width: djW, height: djH, fill: 'transparent',
+        style: 'cursor:grab;touch-action:none',
+      });
+      handle.addEventListener('pointerdown', onDjPointerDown);
+      g.appendChild(handle);
+    }
+    svg.appendChild(g);
+  }
+
+  /* ---------------------------- Les appareils ---------------------------- */
+  for (const node of nodes) {
+    const gear = GEAR_MAP[node.gearId];
+    const { width, height } = nodeStageSize(node);
+    const g = el('g', { 'data-node-id': node.id, class: 'stage-node' });
+
+    const inner = el('g', {
+      transform: node.flip
+        ? `translate(${node.sx + width} ${node.sy}) scale(-1 1)`
+        : `translate(${node.sx} ${node.sy})`,
+    });
+    if (node.image) drawImage(inner, node.image, width, height, Math.min(9, width * 0.06));
+    else drawShape(inner, gear?.icon || 'box', width, height, c);
+    g.appendChild(inner);
+
+    if (selected === node.id) {
+      g.appendChild(el('rect', {
+        x: node.sx - 5, y: node.sy - 5, width: width + 10, height: height + 10, rx: 10,
+        fill: 'none', stroke: c.accent, 'stroke-width': 2, 'stroke-dasharray': '6 4',
+      }));
+    }
+
+    if (!node.hideLabel) {
+      wrapLabel(nodeLabel(node).toUpperCase(), width).forEach((line, i) => {
+        g.appendChild(text(line, {
+          x: node.sx + width / 2, y: node.sy + height + 15 + i * 11,
+          'text-anchor': 'middle', 'font-size': 9.5, 'font-weight': 700,
+          fill: c.label, 'letter-spacing': '.6',
+        }));
+      });
+    }
+
+    if (interactive && onNodePointerDown) {
+      const handle = el('rect', {
+        x: node.sx, y: node.sy, width, height, fill: 'transparent',
+        style: 'cursor:grab;touch-action:none',
+      });
+      handle.addEventListener('pointerdown', (e) => {
+        if (onSelect) onSelect(node);
+        onNodePointerDown(node, e);
+      });
+      g.appendChild(handle);
+    }
+
+    svg.appendChild(g);
+  }
+
+  return svg;
 }
 
-/** Coupe une légende en deux lignes si elle dépasse la largeur de l'appareil. */
+/** Rectangle englobant tout ce qui est dessiné. */
+export function stageBounds(plan, margin = 20) {
+  ensurePositions(plan);
+  const stage = stageState(plan);
+  const nodes = visibleNodes(plan);
+  if (!nodes.length) return { x: 0, y: 0, width: 600, height: 380 };
+
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  const grow = (x, y, w, h) => {
+    minX = Math.min(minX, x); minY = Math.min(minY, y);
+    maxX = Math.max(maxX, x + w); maxY = Math.max(maxY, y + h);
+  };
+
+  for (const node of nodes) {
+    const { width, height } = nodeStageSize(node);
+    grow(node.sx, node.sy, width, height + (node.hideLabel ? 0 : 26));
+  }
+  if (stage.showDj && stage.dj) grow(stage.dj.x, stage.dj.y, 140, 138);
+
+  return {
+    x: minX - margin, y: minY - margin,
+    width: (maxX - minX) + margin * 2,
+    height: (maxY - minY) + margin * 2,
+  };
+}
+
+/** Coupe une légende trop longue en deux lignes. */
 function wrapLabel(label, width) {
-  const maxChars = Math.max(8, Math.floor(width / 5.6));
+  const maxChars = Math.max(9, Math.floor(width / 5.6));
   if (label.length <= maxChars) return [label];
   const words = label.split(/[\s/]+/);
   const lines = [''];
@@ -292,153 +372,7 @@ function wrapLabel(label, width) {
   return lines.slice(0, 2);
 }
 
-/**
- * Dessine le plan de cabine.
- * @param {object} plan
- * @param {object} opts
- * @param {'screen'|'print'} [opts.mode]
- * @param {string} [opts.djLabel]
- */
-export function renderStagePlot(plan, opts = {}) {
-  const { mode = 'screen', djLabel = 'DJ' } = opts;
-  const c = palette(mode);
-  const slots = layout(plan);
-
-  const widthOf = (node) => (GEAR_MAP[node.gearId]?.units || 1) * UNIT;
-  const rowWidth = (list) => list.reduce((s, n) => s + widthOf(n) + GAP, 0) - GAP;
-
-  const boothW = Math.max(rowWidth(slots.booth), 300);
-  const monitorW = 118;
-  const monitorH = 118;
-  const sideGap = 40;
-
-  const LABEL_Y = 17;    // hauteur de la ligne de légendes sous les appareils
-  const DJ_Y = 34;       // la silhouette commence sous les légendes
-
-  const totalW = boothW + (slots.left.length ? monitorW + sideGap : 0) + (slots.right.length ? monitorW + sideGap : 0) + 80;
-  const aboveH = slots.above.length ? 110 : 0;
-  const frontH = slots.front.length ? 130 : 0;
-  const totalH = aboveH + DEV_H + 150 + frontH + 40;
-
-  const svg = el('svg', {
-    viewBox: `0 0 ${totalW} ${totalH}`,
-    class: 'stage-svg',
-    role: 'img',
-    'aria-label': `Plan de cabine : ${plan.nodes.length} appareils`,
-  });
-
-  const boothX = (totalW - boothW) / 2;
-  const boothY = aboveH + 30;
-  const linkLayer = el('g');
-  svg.appendChild(linkLayer);
-
-  /* ------------------------- Rangée au-dessus ------------------------- */
-  const abovePositions = new Map();
-  if (slots.above.length) {
-    const w = rowWidth(slots.above);
-    let x = (totalW - w) / 2;
-    for (const node of slots.above) {
-      const dw = widthOf(node);
-      const g = el('g');
-      drawDevice(g, GEAR_MAP[node.gearId] || {}, x, 14, dw, 56, c);
-      g.appendChild(text(nodeLabel(node).toUpperCase(), {
-        x: x + dw / 2, y: 84, 'text-anchor': 'middle', 'font-size': 9,
-        'font-weight': 700, fill: c.label, 'letter-spacing': '.6',
-      }));
-      svg.appendChild(g);
-      abovePositions.set(node.id, { x: x + dw / 2, y: 70 });
-      x += dw + GAP;
-    }
-  }
-
-  /* ------------------------- Rangée de cabine ------------------------- */
-  let x = boothX;
-  const boothPositions = new Map();
-  for (const node of slots.booth) {
-    const dw = widthOf(node);
-    const gear = GEAR_MAP[node.gearId] || {};
-    const g = el('g');
-    drawDevice(g, gear, x, boothY, dw, DEV_H, c);
-
-    // Une légende trop longue est coupée en deux lignes, comme sur un rider.
-    wrapLabel(nodeLabel(node).toUpperCase(), dw).forEach((line, i) => {
-      g.appendChild(text(line, {
-        x: x + dw / 2, y: boothY + DEV_H + LABEL_Y + i * 11, 'text-anchor': 'middle',
-        'font-size': 9, 'font-weight': 700, fill: c.label, 'letter-spacing': '.6',
-      }));
-    });
-    svg.appendChild(g);
-    boothPositions.set(node.id, { x: x + dw / 2, y: boothY, w: dw });
-    x += dw + GAP;
-  }
-
-  /* --------------------------- Liaisons réseau --------------------------- */
-  // Les câbles LINK sont les seuls tracés : sur un plan de cabine, c'est la
-  // seule information de câblage qui intéresse l'organisateur.
-  for (const link of plan.links) {
-    const type = String(link.cable).split('>')[0];
-    if (type !== 'ethernet') continue;
-    const a = abovePositions.get(link.from.node) || boothPositions.get(link.from.node);
-    const b = abovePositions.get(link.to.node) || boothPositions.get(link.to.node);
-    if (!a || !b) continue;
-    const ay = abovePositions.has(link.from.node) ? a.y : boothY;
-    const by = abovePositions.has(link.to.node) ? b.y : boothY;
-    const top = Math.min(ay, by) - 14;
-    linkLayer.appendChild(el('path', {
-      d: `M${a.x} ${ay} V${top} H${b.x} V${by}`,
-      fill: 'none', stroke: c.link, 'stroke-width': 1.6, opacity: 0.85,
-    }));
-  }
-
-  /* ------------------------------- Le DJ ------------------------------- */
-  drawDj(svg, boothX + boothW / 2, boothY + DEV_H + DJ_Y, c, djLabel);
-
-  /* ----------------------------- Les retours ----------------------------- */
-  const drawSide = (list, side) => {
-    if (!list.length) return;
-    const sx = side === 'left' ? boothX - sideGap - monitorW : boothX + boothW + sideGap;
-    let sy = boothY + 10;
-    for (const node of list) {
-      const g = el('g');
-      drawMonitor(g, node, sx, sy, monitorW, monitorH, c, side);
-      const label = nodeLabel(node);
-      g.appendChild(text(label, {
-        x: sx + monitorW / 2, y: sy + monitorH + 16, 'text-anchor': 'middle',
-        'font-size': 10, 'font-weight': 700, fill: c.sub,
-      }));
-      g.appendChild(text(side === 'left' ? '(GAUCHE)' : '(DROITE)', {
-        x: sx + monitorW / 2, y: sy + monitorH + 30, 'text-anchor': 'middle',
-        'font-size': 9, fill: c.sub, opacity: 0.8,
-      }));
-      svg.appendChild(g);
-      sy += monitorH + 54;
-    }
-  };
-  drawSide(slots.left, 'left');
-  drawSide(slots.right, 'right');
-
-  /* ------------------------------ Devant ------------------------------ */
-  if (slots.front.length) {
-    const w = rowWidth(slots.front);
-    let fx = (totalW - w) / 2;
-    const fy = boothY + DEV_H + 150;
-    for (const node of slots.front) {
-      const dw = widthOf(node);
-      const g = el('g');
-      drawDevice(g, GEAR_MAP[node.gearId] || {}, fx, fy, dw, 84, c);
-      g.appendChild(text(nodeLabel(node).toUpperCase(), {
-        x: fx + dw / 2, y: fy + 100, 'text-anchor': 'middle', 'font-size': 9,
-        'font-weight': 700, fill: c.label, 'letter-spacing': '.6',
-      }));
-      svg.appendChild(g);
-      fx += dw + GAP;
-    }
-  }
-
-  return svg;
-}
-
-/** Plan de cabine sérialisé, pour l'insertion dans un document imprimable. */
+/** Plan de cabine sérialisé, pour un document imprimable. */
 export function stagePlotToPrintSVG(plan, maxWidth = 165, opts = {}) {
   const svg = renderStagePlot(plan, { ...opts, mode: 'print' });
   const [, , w, hh] = svg.getAttribute('viewBox').split(' ').map(Number);
@@ -449,9 +383,8 @@ export function stagePlotToPrintSVG(plan, maxWidth = 165, opts = {}) {
 }
 
 /**
- * Matériel réparti selon qui le fournit : c'est la liste
- * « l'organisateur doit fournir » des riders professionnels.
- * @returns {{promoter: Array<{label, count, note}>, artist: Array}}
+ * Matériel réparti selon qui le fournit : les deux listes du rider.
+ * @returns {{promoter: Array, artist: Array}}
  */
 export function providedLists(plan) {
   const groups = { promoter: new Map(), artist: new Map() };
@@ -464,15 +397,31 @@ export function providedLists(plan) {
     const map = groups[by] || groups.promoter;
     const entry = map.get(key) || {
       label: key, count: 0,
-      req: gear.req || '',        // exigence courte, pour la liste du rider
-      note: gear.note || '',      // description longue, pour l'écran
+      req: gear.req || '',
+      note: gear.note || '',
       category: gear.category,
     };
     entry.count++;
     map.set(key, entry);
   }
 
-  const order = Object.keys(CATEGORIES);
+  const order = ['player', 'mixer', 'controller', 'computer', 'fx', 'mic', 'sound', 'video', 'utility'];
   const sort = (map) => [...map.values()].sort((a, b) => order.indexOf(a.category) - order.indexOf(b.category));
   return { promoter: sort(groups.promoter), artist: sort(groups.artist) };
 }
+
+/** Répartition par emplacement — utilisée par le rangement et les tests. */
+export function layout(plan) {
+  const slots = { above: [], booth: [], left: [], right: [], front: [], out: [] };
+  plan.nodes.forEach((node, i) => {
+    const slot = node.slot || defaultSlot(node.gearId);
+    (slots[slot] || slots.booth).push({ node, order: node.order ?? i });
+  });
+  for (const key of Object.keys(slots)) {
+    slots[key].sort((a, b) => a.order - b.order);
+    slots[key] = slots[key].map((e) => e.node);
+  }
+  return slots;
+}
+
+export { SHAPES };

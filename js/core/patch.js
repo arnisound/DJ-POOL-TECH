@@ -76,6 +76,22 @@ export function addNode(plan, gearId, position = null) {
   return node;
 }
 
+/**
+ * Paire de retours de cabine : une enceinte de chaque côté du DJ, toutes
+ * deux alimentées par la sortie BOOTH du mixeur.
+ */
+export function addBoothPair(plan, mixerId, port = 'booth', length = 5) {
+  const left = addNode(plan, 'booth');
+  const right = addNode(plan, 'booth');
+  left.slot = 'left';
+  right.slot = 'right';
+  if (mixerId) {
+    addLink(plan, { node: mixerId, port }, { node: left.id, port: 'in' }, { length });
+    addLink(plan, { node: mixerId, port }, { node: right.id, port: 'in' }, { length });
+  }
+  return [left, right];
+}
+
 export function removeNode(plan, nodeId) {
   plan.nodes = plan.nodes.filter((n) => n.id !== nodeId);
   plan.links = plan.links.filter((l) => l.from.node !== nodeId && l.to.node !== nodeId);
@@ -253,14 +269,13 @@ export const PRESETS = {
       const cdj2 = addNode(plan, 'cdj3000', { x: 30, y: 190 });
       const mixer = addNode(plan, 'djm900', { x: 330, y: 40 });
       const foh = addNode(plan, 'foh', { x: 680, y: 40 });
-      const booth = addNode(plan, 'booth', { x: 680, y: 190 });
       const strip = addNode(plan, 'powerstrip', { x: 330, y: 420 });
       addLink(plan, { node: cdj1.id, port: 'out' }, { node: mixer.id, port: 'ch2line' }, { length: 1 });
       addLink(plan, { node: cdj2.id, port: 'out' }, { node: mixer.id, port: 'ch3line' }, { length: 1 });
       addLink(plan, { node: cdj1.id, port: 'link' }, { node: mixer.id, port: 'link' }, { length: 1 });
       addLink(plan, { node: cdj2.id, port: 'link' }, { node: mixer.id, port: 'link' }, { length: 1 });
       addLink(plan, { node: mixer.id, port: 'master1' }, { node: foh.id, port: 'in' }, { length: 10 });
-      addLink(plan, { node: mixer.id, port: 'booth' }, { node: booth.id, port: 'in' }, { length: 5 });
+      const [booth] = addBoothPair(plan, mixer.id);
       for (const [i, n] of [cdj1, cdj2, mixer, foh, booth].entries()) {
         addLink(plan, { node: strip.id, port: `o${i + 1}` }, { node: n.id, port: 'pwr' }, { length: 3 });
       }
@@ -277,14 +292,13 @@ export const PRESETS = {
       const mixer = addNode(plan, 'djma9', { x: 330, y: 120 });
       const sw = addNode(plan, 'switch', { x: 330, y: 560 });
       const foh = addNode(plan, 'foh', { x: 700, y: 120 });
-      const booth = addNode(plan, 'booth', { x: 700, y: 270 });
       players.forEach((cdj, i) => {
         addLink(plan, { node: cdj.id, port: 'out' }, { node: mixer.id, port: `ch${i + 1}line` }, { length: 1 });
         addLink(plan, { node: cdj.id, port: 'link' }, { node: sw.id, port: `p${i + 1}` }, { length: 1 });
       });
       addLink(plan, { node: mixer.id, port: 'link' }, { node: sw.id, port: 'p5' }, { length: 1 });
       addLink(plan, { node: mixer.id, port: 'master1' }, { node: foh.id, port: 'in' }, { length: 10 });
-      addLink(plan, { node: mixer.id, port: 'booth' }, { node: booth.id, port: 'in' }, { length: 5 });
+      const [booth] = addBoothPair(plan, mixer.id);
       return plan;
     },
   },
@@ -363,7 +377,6 @@ export const PRESETS = {
       const laptop = addNode(plan, 'laptop', { x: 30, y: 620 });
       const mic = addNode(plan, 'micfil', { x: 30, y: 800 });
       const foh = addNode(plan, 'foh', { x: 720, y: 120 });
-      const booth = addNode(plan, 'booth', { x: 720, y: 260 });
 
       players.forEach((cdj, i) => {
         addLink(plan, { node: cdj.id, port: 'out' }, { node: mixer.id, port: `ch${i + 1}line` }, { length: 1 });
@@ -373,7 +386,7 @@ export const PRESETS = {
       addLink(plan, { node: laptop.id, port: 'usb1' }, { node: mixer.id, port: 'usbb1' }, { length: 2 });
       addLink(plan, { node: mic.id, port: 'out' }, { node: mixer.id, port: 'mic1' }, { length: 5 });
       addLink(plan, { node: mixer.id, port: 'master1' }, { node: foh.id, port: 'in' }, { length: 10 });
-      addLink(plan, { node: mixer.id, port: 'booth' }, { node: booth.id, port: 'in' }, { length: 5 });
+      const [booth] = addBoothPair(plan, mixer.id);
       return plan;
     },
   },
@@ -387,12 +400,11 @@ export const PRESETS = {
       const laptop = addNode(plan, 'laptop', { x: 40, y: 520 });
       const mic = addNode(plan, 'micfil', { x: 40, y: 700 });
       const foh = addNode(plan, 'foh', { x: 430, y: 60 });
-      const booth = addNode(plan, 'booth', { x: 430, y: 200 });
       const fiber = addNode(plan, 'hdmifiber', { x: 430, y: 520 });
       const screen = addNode(plan, 'videoproc', { x: 760, y: 520 });
 
       addLink(plan, { node: xz.id, port: 'master1' }, { node: foh.id, port: 'in' }, { length: 10 });
-      addLink(plan, { node: xz.id, port: 'booth' }, { node: booth.id, port: 'in' }, { length: 5 });
+      const [booth] = addBoothPair(plan, xz.id);
       addLink(plan, { node: mic.id, port: 'out' }, { node: xz.id, port: 'mic1' }, { length: 5 });
       addLink(plan, { node: laptop.id, port: 'usb2' }, { node: xz.id, port: 'usbb' }, { length: 2 });
       addLink(plan, { node: laptop.id, port: 'hdmi' }, { node: fiber.id, port: 'in' }, { length: 2 });
@@ -411,13 +423,12 @@ export const PRESETS = {
       const mic = addNode(plan, 'michf', { x: 30, y: 370 });
       const mixer = addNode(plan, 'djm900', { x: 340, y: 40 });
       const foh = addNode(plan, 'foh', { x: 700, y: 40 });
-      const booth = addNode(plan, 'booth', { x: 700, y: 180 });
       const wedge = addNode(plan, 'wedge', { x: 700, y: 320 });
       addLink(plan, { node: cdj1.id, port: 'out' }, { node: mixer.id, port: 'ch2line' }, { length: 1 });
       addLink(plan, { node: cdj2.id, port: 'out' }, { node: mixer.id, port: 'ch3line' }, { length: 1 });
       addLink(plan, { node: mic.id, port: 'out' }, { node: mixer.id, port: 'mic1' }, { length: 5 });
       addLink(plan, { node: mixer.id, port: 'master1' }, { node: foh.id, port: 'in' }, { length: 10 });
-      addLink(plan, { node: mixer.id, port: 'booth' }, { node: booth.id, port: 'in' }, { length: 5 });
+      const [booth] = addBoothPair(plan, mixer.id);
       addLink(plan, { node: mixer.id, port: 'rec' }, { node: wedge.id, port: 'in' }, { length: 8 });
       return plan;
     },
